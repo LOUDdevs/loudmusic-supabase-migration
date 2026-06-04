@@ -19,7 +19,7 @@ serve(async (req) => {
 
   try {
     const url = new URL(req.url)
-    const path = url.pathname
+    const path = url.pathname.replace(/^\/audio-analysis/, '') || '/'
 
     if (path === '/health') {
       return new Response(JSON.stringify({ status: 'ok', version: '0.2.0' }), {

@@ -11,13 +11,27 @@
 4. Copy `.env.example` → `.env` and fill in the values
 5. Run edge functions: `supabase functions deploy`
 
+## API Registry + Smoke Tests
+
+Canonical API record:
+
+- [`docs/supabase-api-registry.md`](docs/supabase-api-registry.md)
+
+Run live smoke tests:
+
+```bash
+python3 scripts/smoke_test_supabase_apis.py
+```
+
+The smoke-test script uses local environment credentials when present, otherwise it uses the linked Supabase project + Supabase CLI to retrieve the anon key without printing secrets.
+
 ## Edge Functions
 
 | Function | Original Port | Status |
 |----------|---------------|--------|
-| `studio-directory` | 8020 | Scaffolded |
-| `audio-analysis` | 8012 | Scaffolded |
-| `artist-enrichment` | 3010 | Scaffolded |
+| `studio-directory` | 8020 | Deployed + smoke-tested |
+| `audio-analysis` | 8012 | Deployed + smoke-tested health route; worker wiring pending |
+| `artist-enrichment` | 3010 | Deployed + smoke-tested; artist data import/API wiring pending |
 
 ## Database Migrations
 

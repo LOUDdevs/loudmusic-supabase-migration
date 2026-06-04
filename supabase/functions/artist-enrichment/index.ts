@@ -13,12 +13,12 @@ serve(async (req) => {
 
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL')!,
-    Deno.env.get('SUPABASE_SERVICE_KEY')!, // Uses service role for admin ops
+    Deno.env.get('SUPABASE_SERVICE_KEY') ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, // Uses service role for admin ops
   )
 
   try {
     const url = new URL(req.url)
-    const path = url.pathname
+    const path = url.pathname.replace(/^\/artist-enrichment/, '') || '/'
 
     if (path === '/api/artists' && req.method === 'GET') {
       // GET /api/artists - List enriched artists

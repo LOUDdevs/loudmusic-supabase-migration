@@ -1,0 +1,6 @@
+# Supabase local link/runtime metadata
+supabase/.temp/
+
+# Python smoke-test cache
+__pycache__/
+*.py[cod]

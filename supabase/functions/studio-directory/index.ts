@@ -19,7 +19,7 @@ serve(async (req) => {
 
   try {
     const url = new URL(req.url)
-    const path = url.pathname
+    const path = url.pathname.replace(/^\/studio-directory/, '') || '/'
 
     // Route mapping from original FastAPI app
     if (path === '/api/studios') {
