@@ -1,11 +1,10 @@
 -- Studio Directory schema (migrated from SQLite studios.db)
 -- Maps the core fields from the original FastAPI app
 
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pg_trgm"; -- For fuzzy text search
 
 CREATE TABLE IF NOT EXISTS studios (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     slug            VARCHAR(255) UNIQUE NOT NULL,
     name            VARCHAR(512) NOT NULL,
     address         TEXT,
@@ -63,7 +62,7 @@ CREATE POLICY "Only authenticated users can insert studios"
     ON studios FOR INSERT
     WITH CHECK (auth.role() = 'authenticated');
 
-CREATE POLICY "Only owners can update their studios"
+CREATE POLICY "Only authenticated users can update studios"
     ON studios FOR UPDATE
-    USING (auth.uid() = owner_id)
-    WITH CHECK (auth.uid() = owner_id);
+    USING (auth.role() = 'authenticated')
+    WITH CHECK (auth.role() = 'authenticated');

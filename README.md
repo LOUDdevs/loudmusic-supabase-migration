@@ -23,15 +23,15 @@ Run live smoke tests:
 python3 scripts/smoke_test_supabase_apis.py
 ```
 
-The smoke-test script uses local environment credentials when present, otherwise it uses the linked Supabase project + Supabase CLI to retrieve the anon key without printing secrets.
+The smoke-test script uses local environment credentials when present, otherwise it uses the linked Supabase project + Supabase CLI to retrieve anon/service credentials without printing secrets. It validates semantic responses: required fields, record counts, auth behavior, nearby distance filtering, create/read/delete flows, and cleanup.
 
 ## Edge Functions
 
 | Function | Original Port | Status |
 |----------|---------------|--------|
-| `studio-directory` | 8020 | Deployed + smoke-tested |
-| `audio-analysis` | 8012 | Deployed + smoke-tested health route; worker wiring pending |
-| `artist-enrichment` | 3010 | Deployed + smoke-tested; artist data import/API wiring pending |
+| `studio-directory` | 8020 | Deployed + semantic-tested; `/api/nearby` performs radius filtering and returns `distance_miles` |
+| `audio-analysis` | 8012 | Deployed + semantic-tested; unauthenticated queueing is denied, authenticated/service queue/results flow works; worker wiring pending |
+| `artist-enrichment` | 3010 | Deployed + semantic-tested; 77 artists imported; public reads work; write/enrich routes require auth/service role |
 
 ## Database Migrations
 

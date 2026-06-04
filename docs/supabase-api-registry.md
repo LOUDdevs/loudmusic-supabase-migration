@@ -1,6 +1,6 @@
 # LOUDmusic Supabase API Registry
 
-Last verified: 2026-06-04T01:10:53Z
+Last verified: 2026-06-04T01:30:00Z
 
 ## Project
 
@@ -69,14 +69,14 @@ curl "$SUPABASE_URL/rest/v1/studios?select=id,slug,name,city,state&limit=5" \
 ### `public.artist`
 
 - REST endpoint: `/rest/v1/artist`
-- Current row count at verification: `0`
+- Current row count at verification: `77`
 - RLS: enabled
 - Current public policy: `Artists are publicly readable` (`SELECT USING true`)
 - Service policy: service role can upsert artists
-- Current smoke status: `200 OK`, empty list
+- Current smoke status: `200 OK`, populated list
 - Primary use: enriched artist records from artist-enrichment pipeline
-- Important status note: the artist-enrichment Postgres dump was extracted from server `37172`, but the extracted rows are not live in Supabase yet.
-- Local extraction path:
+- Important status note: the artist-enrichment Postgres dump from server `37172` has been imported into Supabase.
+- Import source path:
   - `/home/derrick/artist-enrichment-exports/artist_enrichment_export_20260604T002636Z/artists.dump`
 - Important columns:
   - `id`, `spotify_id`, `chartmetric_id`, `name`
@@ -141,7 +141,7 @@ Authorization: Bearer <anon-key-or-user-jwt>
   - `GET /api/studios` — list studios, currently capped at 100 in function
   - `GET /api/studio/{slug}` — single studio by slug
   - `GET /api/search?q=<query>` — name search
-  - `GET /api/nearby?lat=<lat>&lng=<lng>&radius=<radius>` — placeholder; currently returns capped studio list, not true geospatial search yet
+  - `GET /api/nearby?lat=<lat>&lng=<lng>&radius=<radius>&limit=<limit>` — real radius filtering using studio coordinates; returns nearest studios sorted by `distance_miles`
 
 Example:
 
@@ -159,9 +159,9 @@ curl "$SUPABASE_URL/functions/v1/studio-directory/api/studios" \
 - Current smoke status: `200 OK` for `/health`
 - Routes:
   - `GET /health` — health check; returns `{ "status": "ok", "version": "0.2.0" }`
-  - `POST /api/analyze` — creates a pending analysis job; heavy processing still needs external worker wiring
+  - `POST /api/analyze` — creates a pending analysis job for authenticated users or service-role callers; unauthenticated callers receive `401`
   - `POST /api/analyze/spotify` — placeholder; returns `not_implemented`
-  - `GET /api/results?job_id=<uuid>` — fetch one analysis job
+  - `GET /api/results?job_id=<uuid>` — fetch one analysis job; service role can read any job, users can read their own jobs
 
 Example:
 
@@ -176,12 +176,12 @@ curl "$SUPABASE_URL/functions/v1/audio-analysis/health" \
 - Function URL: `/functions/v1/artist-enrichment`
 - Status: deployed and smoke-tested
 - Current deployment status: ACTIVE
-- Current smoke status: `200 OK` for `/api/artists`, empty list because table has 0 rows
+- Current smoke status: `200 OK` for `/api/artists`, populated list
 - Routes:
   - `GET /api/artists` — list artists, currently capped at 100
   - `GET /api/artists/search?q=<query>` — search artists by name
-  - `POST /api/artists/enrich` — placeholder; returns queued response, external APIs not wired yet
-  - `POST /api/artists` — direct service-role upsert from enrichment pipeline
+  - `POST /api/artists/enrich` — authenticated/service-role placeholder; returns queued response, external APIs not wired yet
+  - `POST /api/artists` — service-role-only direct upsert from enrichment pipeline
 
 Example:
 
@@ -205,18 +205,20 @@ The script fetches anon credentials via Supabase CLI when available and does not
 ## Current smoke-test summary
 
 - REST `/studios`: `200 OK`, list returned
-- REST `/artist`: `200 OK`, empty list
+- REST `/artist`: `200 OK`, populated list (`77` imported rows)
 - REST `/analysis_jobs`: `200 OK`, empty list
 - Edge `audio-analysis /health`: `200 OK`
+- Edge `audio-analysis /api/analyze`: unauthenticated `401`; service-role create/read/delete flow passes
 - Edge `studio-directory /api/studios`: `200 OK`, list returned
-- Edge `artist-enrichment /api/artists`: `200 OK`, empty list
+- Edge `studio-directory /api/nearby`: `200 OK`, radius-filtered and sorted by `distance_miles`
+- Edge `artist-enrichment /api/artists`: `200 OK`, populated list
+- Edge `artist-enrichment` write routes: anonymous requests denied; service-role upsert flow passes
 
 ## Known gaps / next hardening steps
 
-1. Import artist extraction into `public.artist` if we want artist API data live in Supabase.
-2. Replace broad table grants with least-privilege grants before public launch.
-3. Replace deprecated `auth.role()` policy checks with explicit `TO authenticated` / `TO service_role` policies in a reviewed migration.
-4. Add pagination parameters to Edge Function list routes before exposing to production clients.
-5. Wire `audio-analysis` to the external audio worker or Supabase queue before treating analysis as fully functional.
-6. Wire `artist-enrichment` to Chartmetric/Soundcharts/Spotify before treating enrichment as fully functional.
-7. Consider public-safe views for `studios` and `artist` so private/contact-heavy columns are not exposed directly through public REST endpoints.
+1. Wire `audio-analysis` to the external audio worker or Supabase queue before treating analysis processing as fully functional.
+2. Wire `artist-enrichment` to Chartmetric/Soundcharts/Spotify before treating live enrichment as fully functional.
+3. Replace broad table grants with least-privilege grants before public launch.
+4. Replace deprecated `auth.role()` policy checks with explicit `TO authenticated` / `TO service_role` policies in a reviewed migration.
+5. Add cursor/offset pagination parameters to Edge Function list routes before exposing large lists to production clients.
+6. Consider public-safe views for `studios` and `artist` so private/contact-heavy columns are not exposed directly through public REST endpoints.
