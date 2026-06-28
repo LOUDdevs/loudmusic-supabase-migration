@@ -1,0 +1,8 @@
+httpx>=0.27
+python-dotenv>=1.0
+supabase>=2.0
+icalendar>=6.0
+python-dateutil>=2.9
+respx>=0.21       # httpx-native mock for tests
+pytest>=7.4
+pytest-mock>=3.11
