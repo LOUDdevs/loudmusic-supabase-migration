@@ -220,15 +220,15 @@ class SendPilotClient:
     def iter_messages(self, conversation_id: str, account_id: str) -> Iterator[dict]:
         """Yield every message in a conversation."""
         params: dict = {
-            "conversationId": conversation_id,
             "accountId": account_id,
             "limit": PAGE_SIZE,
         }
         continuation: str | None = None
+        path = f"/inbox/conversations/{conversation_id}/messages"
         while True:
             if continuation:
                 params["continuationToken"] = continuation
-            data = self._get("/inbox/messages", params=params)
+            data = self._get(path, params=params)
             for msg in data.get("messages", []):
                 yield msg
             pagination = data.get("pagination", {}) or {}
