@@ -49,10 +49,33 @@ except ImportError:
 _LOG_FORMAT = "%(asctime)s %(levelname)-7s %(name)s %(message)s"
 _DATE_FORMAT = "%Y-%m-%dT%H:%M:%S%z"
 
+# Third-party loggers that print one line per HTTP request at INFO.
+# These get piped to Telegram by the no_agent cron, so the noise is
+# user-visible. Keep WARNING+ only.
+_NOISY_LOGGERS = (
+    "httpx",
+    "httpcore",
+    "httpcore.connection",
+    "httpcore.http11",
+    "hpack",
+    "urllib3",
+    "urllib3.connectionpool",
+)
+
+
+def _silence_noisy_loggers() -> None:
+    for noisy in _NOISY_LOGGERS:
+        logging.getLogger(noisy).setLevel(logging.WARNING)
+
 
 def configure_logging(name: str, level: int = logging.INFO) -> logging.Logger:
-    """Set up stdout logging in a cron-friendly single-line format."""
+    """Set up stdout logging in a cron-friendly single-line format.
+
+    Also silences third-party HTTP transport loggers (httpx, httpcore, urllib3)
+    so per-request lines do not pollute the user-facing Telegram message.
+    """
     logging.basicConfig(level=level, format=_LOG_FORMAT, datefmt=_DATE_FORMAT, stream=sys.stdout)
+    _silence_noisy_loggers()
     return logging.getLogger(name)
 
 
@@ -124,16 +147,19 @@ def schema_preflight(sb: Any, source_label: str) -> None:
 
 
 def start_run(sb: Any, source: str) -> str:
-    """Insert a 'running' telemetry row and return a UUID for this run.
+    """Insert a 'running' telemetry row and return its UUID.
 
-    We don't depend on the response shape (Supabase returns the inserted row
-    but the response can vary by PostgREST version). A locally-generated
-    UUID is enough — the telemetry row is identified by `id`, and finish_run
-    uses the same UUID to update the row.
+    The UUID must be included in the inserted row. Returning a locally-generated
+    UUID without inserting it leaves finish_run() updating a non-existent row,
+    which makes the dashboard show permanently-running ingestion jobs.
     """
     import uuid
-    sb.table("dashboard_ingestion_runs").insert({"source": source, "status": "running"}).execute()
-    return str(uuid.uuid4())
+
+    run_id = str(uuid.uuid4())
+    sb.table("dashboard_ingestion_runs").insert(
+        {"id": run_id, "source": source, "status": "running"}
+    ).execute()
+    return run_id
 
 
 def finish_run(
@@ -148,6 +174,7 @@ def finish_run(
     sb.table("dashboard_ingestion_runs").update(
         {
             "status": status,
+            "finished_at": datetime.now(timezone.utc).isoformat(),
             "records_written": records_written,
             "error": (error or "")[:1000],
         }
