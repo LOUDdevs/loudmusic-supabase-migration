@@ -1,0 +1,1178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="LOUDmusic In-Depth Artist Bio Survey — 25 questions to craft a top-tier publicist-grade artist biography.">
+<title>LOUDmusic — Artist Bio Survey</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0A0A0A;
+    --surface: #131316;
+    --surface-2: #1C1C22;
+    --border: #2A2A33;
+    --border-focus: #00E5FF;
+    --text: #FFFFFF;
+    --text-muted: #9A9AA8;
+    --text-dim: #6B6B7B;
+    --accent: #00E5FF;
+    --accent-glow: rgba(0, 229, 255, 0.18);
+    --gold: #FFD24A;
+    --danger: #FF4D6D;
+    --success: #4ADE80;
+  }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    background-image:
+      radial-gradient(ellipse 1200px 600px at 50% -200px, rgba(0, 229, 255, 0.08), transparent),
+      radial-gradient(ellipse 800px 400px at 100% 100%, rgba(255, 210, 74, 0.04), transparent);
+    background-attachment: fixed;
+  }
+  .container { max-width: 760px; margin: 0 auto; padding: 32px 20px 80px; }
+
+  /* Header */
+  .header { text-align: center; padding: 40px 0 48px; }
+  .brand {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 0.32em;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-bottom: 28px;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .brand-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 12px var(--accent);
+    animation: pulse 2.4s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+  h1 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: clamp(2rem, 5vw, 3rem);
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    margin-bottom: 16px;
+  }
+  h1 .accent { color: var(--accent); }
+  .subtitle {
+    color: var(--text-muted);
+    font-size: 1.0625rem;
+    max-width: 560px;
+    margin: 0 auto;
+  }
+
+  /* Progress */
+  .progress-wrap {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: rgba(10, 10, 10, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    padding: 16px 0;
+    margin: 0 -20px 32px;
+    padding-left: 20px;
+    padding-right: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .progress-meta {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 8px;
+    font-size: 13px;
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+  .progress-meta strong { color: var(--text); font-weight: 600; }
+  .progress-bar {
+    height: 4px;
+    background: var(--surface-2);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--gold));
+    width: 0%;
+    transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    border-radius: 2px;
+  }
+
+  .step-chips {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 6px;
+    margin-top: 12px;
+  }
+  .step-chip {
+    height: 4px;
+    border-radius: 999px;
+    background: var(--surface-2);
+    border: 1px solid rgba(255,255,255,0.04);
+  }
+  .step-chip.active { background: var(--accent); box-shadow: 0 0 16px var(--accent-glow); }
+  .step-chip.done { background: rgba(209, 168, 92, 0.65); }
+
+  .conversation-card {
+    background: linear-gradient(135deg, rgba(46, 229, 157, 0.10), rgba(209, 168, 92, 0.08));
+    border: 1px solid rgba(46, 229, 157, 0.18);
+    border-radius: 16px;
+    padding: 22px;
+    margin-bottom: 20px;
+  }
+  .conversation-eyebrow {
+    color: var(--accent);
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .conversation-prompt {
+    color: var(--text);
+    font-size: 1.05rem;
+    line-height: 1.7;
+    margin: 0;
+  }
+
+
+  /* Section */
+  .section {
+    display: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    margin-bottom: 20px;
+    scroll-margin-top: 100px;
+    animation: sectionIn 0.22s ease-out;
+  }
+  .section.active { display: block; }
+  @keyframes sectionIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .section-num {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .section-title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+    letter-spacing: -0.01em;
+  }
+  .section-intro {
+    color: var(--text-muted);
+    font-size: 0.9375rem;
+    margin-bottom: 24px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* Form fields */
+  .field { margin-bottom: 24px; }
+  .field:last-child { margin-bottom: 0; }
+  .label {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    font-weight: 500;
+    font-size: 0.9375rem;
+    margin-bottom: 8px;
+    color: var(--text);
+  }
+  .q-num {
+    color: var(--accent);
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600;
+    font-size: 0.875rem;
+    flex-shrink: 0;
+  }
+  .help {
+    color: var(--text-dim);
+    font-size: 0.8125rem;
+    margin-top: 6px;
+  }
+  input[type="text"],
+  input[type="date"],
+  textarea {
+    width: 100%;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 0.9375rem;
+    line-height: 1.5;
+    transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+  }
+  textarea { min-height: 96px; resize: vertical; }
+  input[type="text"]:focus,
+  input[type="date"]:focus,
+  textarea:focus {
+    outline: none;
+    border-color: var(--border-focus);
+    box-shadow: 0 0 0 3px var(--accent-glow);
+    background: #1F1F26;
+  }
+  input::placeholder, textarea::placeholder {
+    color: var(--text-dim);
+  }
+
+  /* Artist basics block */
+  .basics-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  @media (max-width: 600px) {
+    .basics-grid { grid-template-columns: 1fr; }
+    .section { padding: 24px 20px; }
+    .step-chips { grid-template-columns: repeat(7, 1fr); }
+    .actions { justify-content: stretch; }
+    .actions .btn { flex: 1 1 100%; justify-content: center; }
+  }
+
+  /* Submit / actions */
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 8px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+  }
+  .actions-left, .actions-right { display: flex; flex-wrap: wrap; gap: 12px; }
+  .btn {
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    font-size: 0.9375rem;
+    padding: 12px 24px;
+    border-radius: 10px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: #001216;
+    box-shadow: 0 0 0 0 var(--accent-glow);
+  }
+  .btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 24px var(--accent-glow);
+  }
+  .btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+  .btn-ghost {
+    background: transparent;
+    color: var(--text-muted);
+    border-color: var(--border);
+  }
+  .btn-ghost:hover { color: var(--text); border-color: var(--text-muted); }
+
+  /* Success card */
+  .success {
+    display: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    margin-top: 24px;
+  }
+  .success.show { display: block; }
+  .success-icon {
+    width: 56px; height: 56px;
+    background: rgba(74, 222, 128, 0.12);
+    color: var(--success);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 28px;
+    margin-bottom: 16px;
+  }
+  .success h2 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 1.5rem;
+    margin-bottom: 8px;
+  }
+  .success p { color: var(--text-muted); margin-bottom: 20px; }
+  .bio-output,
+  .qa-output {
+    background: #050507;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    font-family: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+    font-size: 0.8125rem;
+    line-height: 1.7;
+    color: var(--text);
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    max-height: 520px;
+    overflow-y: auto;
+    margin-bottom: 16px;
+  }
+  .next-steps {
+    background: var(--surface-2);
+    border-left: 3px solid var(--gold);
+    border-radius: 0 10px 10px 0;
+    padding: 16px 20px;
+    margin-top: 16px;
+  }
+  .next-steps h3 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 0.9375rem;
+    margin-bottom: 8px;
+    color: var(--gold);
+  }
+  .next-steps ol { padding-left: 20px; color: var(--text-muted); font-size: 0.875rem; }
+  .next-steps li { margin-bottom: 6px; }
+  .next-steps strong { color: var(--text); font-weight: 600; }
+  .qa-details summary { cursor: pointer; color: var(--gold); font-weight: 700; margin-bottom: 12px; }
+  .bio-output { border-left: 3px solid var(--accent); }
+
+  .review-grid {
+    display: grid;
+    gap: 12px;
+  }
+  .review-item {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+  }
+  .review-label {
+    display: block;
+    color: var(--text-dim);
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .review-value { color: var(--text); line-height: 1.5; }
+  .review-note { color: var(--text-muted); margin-top: 16px; line-height: 1.7; }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 12px 20px;
+    border-radius: 10px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    opacity: 0;
+    transition: all 0.2s;
+    pointer-events: none;
+    z-index: 100;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* Loading spinner */
+  .spinner {
+    display: inline-block;
+    width: 14px; height: 14px;
+    border: 2px solid rgba(0, 18, 22, 0.3);
+    border-top-color: #001216;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Footer */
+  .footer {
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 0.8125rem;
+    margin-top: 48px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+  }
+  .footer a { color: var(--text-muted); text-decoration: none; }
+  .footer a:hover { color: var(--accent); }
+
+  /* Optional tag */
+  .opt {
+    font-size: 0.6875rem;
+    color: var(--text-dim);
+    font-weight: 400;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    background: var(--surface-2);
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+</style>
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <div class="brand">
+        <span class="brand-dot"></span>
+        LOUDmusic
+      </div>
+      <h1>Artist <span class="accent">Bio</span> Survey</h1>
+      <p class="subtitle">A guided artist interview — one focused step at a time. Answer naturally, and we’ll turn the raw story into a publicist-grade bio.</p>
+    </header>
+
+    <div class="progress-wrap" id="progressWrap">
+      <div class="progress-meta">
+        <span>Step <strong id="stepCurrent">1</strong> of <strong id="stepTotal">7</strong> · <strong id="progressCount">0</strong> answered</span>
+        <span id="progressPct">0%</span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+      <div class="step-chips" id="stepChips" aria-label="Survey steps"></div>
+    </div>
+
+    <form id="bioForm" novalidate>
+      <div class="conversation-card" aria-live="polite">
+        <div class="conversation-eyebrow" id="stepEyebrow">Quick setup</div>
+        <p class="conversation-prompt" id="stepPrompt">First, tell us who you are and where to send the finished bio. Then we’ll move through your story one piece at a time.</p>
+      </div>
+
+      <!-- Quick-start: name + email so we can route back to the artist -->
+      <div class="section">
+        <div class="section-num">Setup</div>
+        <h2 class="section-title">Let's start with you</h2>
+        <p class="section-intro">A few basics so we can route your bio back to you. Your email is never shared publicly.</p>
+
+        <div class="basics-grid">
+          <div class="field">
+            <label class="label" for="artist_name"><span class="q-num">★</span>Stage / artist name</label>
+            <input type="text" id="artist_name" name="artist_name" placeholder="e.g. Avery Cole" required>
+          </div>
+          <div class="field">
+            <label class="label" for="artist_email"><span class="q-num">★</span>Email</label>
+            <input type="text" id="artist_email" name="artist_email" placeholder="you@domain.com" required>
+          </div>
+          <div class="field">
+            <label class="label" for="artist_pronouns"><span class="q-num">★</span>Pronouns</label>
+            <select id="artist_pronouns" name="artist_pronouns" required style="width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text);font-family:inherit;font-size:0.9375rem;appearance:none;background-image:url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 12 12%22><path fill=%22%239A9AA8%22 d=%22M6 9L1 4h10z%22/></svg>');background-repeat:no-repeat;background-position:right 14px center;background-size:12px;">
+              <option value="">— select —</option>
+              <option value="he/him">he / him</option>
+              <option value="she/her">she / her</option>
+              <option value="they/them">they / them</option>
+              <option value="custom">Custom (type below)</option>
+            </select>
+            <input type="text" id="artist_pronouns_custom" name="artist_pronouns_custom" placeholder="e.g. xe / xem" style="margin-top:8px;display:none;">
+          </div>
+          <div class="field">
+            <label class="label" for="artist_phone">Phone <span class="opt">Optional</span></label>
+            <input type="text" id="artist_phone" name="artist_phone" placeholder="(555) 555-5555">
+          </div>
+          <div class="field">
+            <label class="label" for="artist_social">Primary social handle <span class="opt">Optional</span></label>
+            <input type="text" id="artist_social" name="artist_social" placeholder="@yourhandle on IG / TikTok / X">
+          </div>
+          <div class="field">
+            <label class="label" for="current_city">Current city / base <span class="opt">Optional</span></label>
+            <input type="text" id="current_city" name="current_city" placeholder="e.g. Atlanta, GA">
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 1 -->
+      <div class="section">
+        <div class="section-num">Section 01 / 05</div>
+        <h2 class="section-title">Early Life &amp; Beginnings</h2>
+        <p class="section-intro">Where the story starts. Be specific — dates, places, the song that changed everything.</p>
+
+        <div class="field">
+          <label class="label" for="q1"><span class="q-num">01</span>Where and when were you born?</label>
+          <input type="text" id="q1" name="q1_birthplace_birthdate" placeholder="City, State / Country · Month YYYY" required>
+        </div>
+
+        <div class="field">
+          <label class="label" for="q2"><span class="q-num">02</span>When did you first discover your love for music?</label>
+          <textarea id="q2" name="q2_love_for_music" placeholder="Age, moment, environment..." required></textarea>
+        </div>
+
+        <div class="field">
+          <label class="label" for="q3"><span class="q-num">03</span>What kind of music did you grow up listening to?</label>
+          <textarea id="q3" name="q3_grow_up_listening" placeholder="Genres, artists, household soundtrack..." required></textarea>
+        </div>
+
+        <div class="field">
+          <label class="label" for="q4"><span class="q-num">04</span>Were there any family members or friends who influenced your musical journey?</label>
+          <textarea id="q4" name="q4_influencers" placeholder="A parent who played bass, a cousin who introduced you to hip-hop..." required></textarea>
+        </div>
+
+        <div class="field">
+          <label class="label" for="q5"><span class="q-num">05</span>Do you remember the first instrument you played or the first song you sang?</label>
+          <textarea id="q5" name="q5_first_instrument_song" placeholder="First guitar chord, first stage, first song you ever wrote..." required></textarea>
+        </div>
+      </div>
+
+      <!-- Section 2 -->
+      <div class="section">
+        <div class="section-num">Section 02 / 05</div>
+        <h2 class="section-title">Education &amp; Training</h2>
+        <p class="section-intro">The reps you put in. Formal or self-taught — both count, both shape the artist.</p>
+
+        <div class="field">
+          <label class="label" for="q6"><span class="q-num">06</span>Did you receive any formal musical training or education?</label>
+          <textarea id="q6" name="q6_formal_training" placeholder="School, conservatory, online courses, mentor..." required></textarea>
+        </div>
+
+        <div class="field">
+          <label class="label" for="q7"><span class="q-num">07</span>Were there any mentors, teachers, or role models who shaped your musical path?</label>
+          <textarea id="q7" name="q7_mentors" placeholder="Names, what they taught you, lasting impact..." required></textarea>
+        </div>
+
+        <div class="field">
+          <label class="label" for="q8"><span class="q-num">08</span>What was the most valuable lesson you learned about music early on?</label>
+          <textarea id="q8" name="q8_early_lesson" placeholder="A principle you still carry..." required></textarea>
+        </div>
+
+        <div class="field">
+          <label class="label" for="q9"><span class="q-num">09</span>How did your educational background influence your approach to music?</label>
+          <textarea id="q9" name="q9_education_influence" placeholder="In-classical-training, self-taught, business degree applied to A&amp;R..." required></textarea>
+        </div>
+
+        <div class="field">
+          <label class="label" for="q10"><span class="q-num">10</span>Did you participate in school bands, choirs, or other musical activities?</label>
+          <textarea id="q10" name="q10_school_activities" placeholder="Marching band, jazz band, gospel choir, battle of the bands..." required></textarea>
+        </div>
+      </div>
+
+      <!-- Section 3 -->
+      <div class="section">
+        <div class="section-num">Section 03 / 05</div>
+        <h2 class="section-title">Career &amp; Achievements</h2>
+        <p class="section-intro">Proof of movement. Even if it's early — releases, sessions, opens, press, milestones.</p>
+
+        <div class="field">
+          <label class="label" for="q11"><span class="q-num">11</span>What inspired you to pursue music as a career?</label>
+          <textarea id="q11" name="q11_pursue_music" placeholder="The decision point. What tipped it from hobby to calling." required></textarea>
+        </div>
+
+        <div class="field">
+          <label class="label" for="q12"><span class="q-num">12</span>Can you describe your first major break or performance?</label>
+          <textarea id="q12" name="q12_first_break" placeholder="The venue, the moment, who was in the room..." required></textarea>
+        </div>
+
+        <div class="field">
+          <label class="label" for="q13"><span class="q-num">13</span>What has been the most challenging aspect of building your music career?</label>
+          <textarea id="q13" name="q13_challenges" placeholder="Be honest — the bio can reframe this as grit." required></textarea>
+        </div>
+
+        <div class="field">
+          <label class="label" for="q14"><span class="q-num">14</span>Which of your songs or projects are you most proud of, and why?</label>
+          <textarea id="q14" name="q14_proudest_work" placeholder="Title, year, what it represents..." required></textarea>
+        </div>
+
+        <div class="field">
+          <label class="label" for="q15"><span class="q-num">15</span>Have you won any awards or received notable recognition for your work?</label>
+          <textarea id="q15" name="q15_awards_recognition" placeholder="Awards, press features, playlist adds, sync placements, label co-signs..." required></textarea>
+        </div>
+      </div>
+
+      <!-- Section 4 -->
+      <div class="section">
+        <div class="section-num">Section 04 / 05</div>
+        <h2 class="section-title">Creative Process &amp; Influences</h2>
+        <p class="section-intro">The sonic fingerprint. This is where the publicist extracts the texture for the bio.</p>
+
+        <div class="field">
+          <label class="label" for="q16"><span class="q-num">16</span>How would you describe your style or genre of music?</label>
+          <textarea id="q16" name="q16_style_genre" placeholder="Don't be modest. Be precise. 'Detroit house meets Southern trap cadence' beats 'eclectic.'" required></textarea>
+        </div>
+
+        <div class="field">
+          <label class="label" for="q17"><span class="q-num">17</span>Who are your biggest musical inspirations, past or present?</label>
+          <textarea id="q17" name="q17_inspirations" placeholder="Artists, producers, eras, specific records..." required></textarea>
+        </div>
+
+        <div class="field">
+          <label class="label" for="q18"><span class="q-num">18</span>What's your creative process like when writing songs or composing music?</label>
+          <textarea id="q18" name="q18_creative_process" placeholder="Rituals, time of day, sessions vs. solo, gear..." required></textarea>
+        </div>
+
+        <div class="field">
+          <label class="label" for="q19"><span class="q-num">19</span>Are there any specific themes or messages you aim to convey through your music?</label>
+          <textarea id="q19" name="q19_themes_messages" placeholder="The 'why' behind the writing..." required></textarea>
+        </div>
+
+        <div class="field">
+          <label class="label" for="q20"><span class="q-num">20</span>How has your music evolved over the years?</label>
+          <textarea id="q20" name="q20_evolution" placeholder="The arc. Where you started vs. where you are now." required></textarea>
+        </div>
+      </div>
+
+      <!-- Section 5 -->
+      <div class="section">
+        <div class="section-num">Section 05 / 05</div>
+        <h2 class="section-title">Personal &amp; Public Life</h2>
+        <p class="section-intro">The human behind the music. The things that make a journalist pick up the phone.</p>
+
+        <div class="field">
+          <label class="label" for="q21"><span class="q-num">21</span>How do you balance your personal life with your music career?</label>
+          <textarea id="q21" name="q21_balance" placeholder="Family, day job, side projects, the tradeoffs..." required></textarea>
+        </div>
+
+        <div class="field">
+          <label class="label" for="q22"><span class="q-num">22</span>Are there causes or charities that are particularly important to you as an artist?</label>
+          <textarea id="q22" name="q22_causes" placeholder="Mental health, equity, education, community work..." required></textarea>
+        </div>
+
+        <div class="field">
+          <label class="label" for="q23"><span class="q-num">23</span>What has been the most memorable moment of connecting with your fans?</label>
+          <textarea id="q23" name="q23_fan_moment" placeholder="A DM, a show, a story someone shared..." required></textarea>
+        </div>
+
+        <div class="field">
+          <label class="label" for="q24"><span class="q-num">24</span>How do you stay inspired and motivated to create new music?</label>
+          <textarea id="q24" name="q24_inspiration" placeholder="Inputs, rituals, what pulls you back to the studio..." required></textarea>
+        </div>
+
+        <div class="field">
+          <label class="label" for="q25"><span class="q-num">25</span>What legacy do you hope to leave in the music world?</label>
+          <textarea id="q25" name="q25_legacy" placeholder="The long view. What do you want to be remembered for?" required></textarea>
+        </div>
+      </div>
+
+      <!-- Review step -->
+      <div class="section review-section" id="reviewStep">
+        <div class="section-num">Final Step</div>
+        <h2 class="section-title">Review &amp; submit</h2>
+        <p class="section-intro">You made it. Give the essentials one last look, then submit your answers and we’ll generate the finished bio with the Architect Publicist.</p>
+        <div class="review-grid" id="reviewOutput"></div>
+        <p class="review-note">After submission, the publicist agent will write the full bio kit automatically. The raw Q&amp;A will still be available underneath for reference.</p>
+      </div>
+
+      <div class="actions" id="stepActions">
+        <div class="actions-left">
+          <button type="button" class="btn btn-ghost" id="prevStep">← Back</button>
+          <button type="button" class="btn btn-ghost" id="saveDraft">Save progress locally</button>
+        </div>
+        <div class="actions-right">
+          <button type="button" class="btn btn-primary" id="nextStep">Next →</button>
+          <button type="submit" class="btn btn-primary" id="submitBtn">Generate my bio →</button>
+        </div>
+      </div>
+    </form>
+
+    <!-- Success card with generated bio + Q&A output -->
+    <div class="success" id="successCard">
+      <div class="success-icon">✓</div>
+      <h2>Your artist bio is ready.</h2>
+      <p>Your responses were submitted to LOUDmusic and the Architect Publicist generated a finished bio kit below.</p>
+
+      <div class="bio-output" id="bioOutput"></div>
+
+      <div class="actions" style="border-top: none; padding-top: 0; margin-top: 0;">
+        <button type="button" class="btn btn-primary" id="copyBio">Copy Bio</button>
+        <button type="button" class="btn btn-ghost" id="downloadBio">Download Bio .txt</button>
+      </div>
+
+      <details class="next-steps qa-details">
+        <summary>Raw survey Q&amp;A</summary>
+        <div class="qa-output" id="qaOutput"></div>
+        <div class="actions" style="border-top: none; padding-top: 0; margin-top: 12px;">
+          <button type="button" class="btn btn-ghost" id="copyQa">Copy Q&amp;A</button>
+          <button type="button" class="btn btn-ghost" id="downloadQa">Download Q&amp;A .txt</button>
+        </div>
+      </details>
+    </div>
+
+    <footer class="footer">
+      Powered by <a href="https://loudmusic.io" target="_blank" rel="noopener">LOUDmusic</a> · Survey responses are stored securely and used only to draft your artist bio.
+    </footer>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+(function() {
+  'use strict';
+
+  // -------- Configuration --------
+  // Default: post to the LOUDmusic artist-bio-survey Supabase Edge Function.
+  // To override (testing), set window.__BIO_FORM_ENDPOINT__ before this script runs.
+  const DEFAULT_ENDPOINT = 'https://hupiguhcsmeucownlbre.supabase.co/functions/v1/artist-bio-survey';
+  const ENDPOINT = (window.__BIO_FORM_ENDPOINT__ || DEFAULT_ENDPOINT).replace(/\/+$/, '');
+
+  // Supabase publishable key (sb_publishable_...). Safe to ship in client HTML —
+  // RLS + Edge Function payload shape enforce server-side access control.
+  const ANON_KEY = 'sb_publishable_G7zOAJMBjLxij-FLTTlgtw_wnAkT0_F';
+
+  // -------- Elements --------
+  const form = document.getElementById('bioForm');
+  const submitBtn = document.getElementById('submitBtn');
+  const nextStepBtn = document.getElementById('nextStep');
+  const prevStepBtn = document.getElementById('prevStep');
+  const saveDraftBtn = document.getElementById('saveDraft');
+  const progressCount = document.getElementById('progressCount');
+  const progressPct = document.getElementById('progressPct');
+  const progressFill = document.getElementById('progressFill');
+  const stepCurrent = document.getElementById('stepCurrent');
+  const stepTotal = document.getElementById('stepTotal');
+  const stepChips = document.getElementById('stepChips');
+  const stepEyebrow = document.getElementById('stepEyebrow');
+  const stepPrompt = document.getElementById('stepPrompt');
+  const reviewOutput = document.getElementById('reviewOutput');
+  const successCard = document.getElementById('successCard');
+  const bioOutput = document.getElementById('bioOutput');
+  const qaOutput = document.getElementById('qaOutput');
+  const copyBioBtn = document.getElementById('copyBio');
+  const downloadBioBtn = document.getElementById('downloadBio');
+  const copyQaBtn = document.getElementById('copyQa');
+  const downloadQaBtn = document.getElementById('downloadQa');
+  const toast = document.getElementById('toast');
+  const sections = Array.from(form.querySelectorAll('.section'));
+  let currentStep = 0;
+  const STEP_COPY = [
+    ['Quick setup', 'First, tell us who you are and where to send the finished bio. Then we’ll move through your story one piece at a time.'],
+    ['Chapter 1', 'Let’s start at the beginning. Don’t worry about sounding polished — details, places, and first memories are what make this useful.'],
+    ['Chapter 2', 'Now give us the training, mentors, and lessons that shaped your ear. Formal school counts. Self-taught reps count too.'],
+    ['Chapter 3', 'This is the movement section: releases, moments, proof, setbacks, and the wins that show your trajectory.'],
+    ['Chapter 4', 'Now we get to the sound. Be specific about texture, influences, process, and the emotional world of the music.'],
+    ['Chapter 5', 'Last story section: the person behind the records, the values, fan connection, and the legacy you want to build.'],
+    ['Final check', 'Review the essentials. If everything looks right, submit and the form will generate your finished bio kit.'],
+  ];
+
+  // -------- 25 question labels (in order) --------
+  const Q_LABELS = [
+    ['q1_birthplace_birthdate',  'Where and when were you born?'],
+    ['q2_love_for_music',        'When did you first discover your love for music?'],
+    ['q3_grow_up_listening',     'What kind of music did you grow up listening to?'],
+    ['q4_influencers',           'Family members or friends who influenced your musical journey?'],
+    ['q5_first_instrument_song', 'First instrument you played or first song you sang?'],
+    ['q6_formal_training',       'Did you receive any formal musical training or education?'],
+    ['q7_mentors',               'Mentors, teachers, or role models who shaped your musical path?'],
+    ['q8_early_lesson',          'Most valuable lesson you learned about music early on?'],
+    ['q9_education_influence',   'How did your educational background influence your approach to music?'],
+    ['q10_school_activities',    'Did you participate in school bands, choirs, or other musical activities?'],
+    ['q11_pursue_music',         'What inspired you to pursue music as a career?'],
+    ['q12_first_break',          'Can you describe your first major break or performance?'],
+    ['q13_challenges',           'Most challenging aspect of building your music career?'],
+    ['q14_proudest_work',        'Songs or projects you are most proud of, and why?'],
+    ['q15_awards_recognition',   'Awards or notable recognition for your work?'],
+    ['q16_style_genre',          'How would you describe your style or genre of music?'],
+    ['q17_inspirations',         'Biggest musical inspirations, past or present?'],
+    ['q18_creative_process',     'Creative process when writing songs or composing music?'],
+    ['q19_themes_messages',      'Specific themes or messages you aim to convey through your music?'],
+    ['q20_evolution',            'How has your music evolved over the years?'],
+    ['q21_balance',              'How do you balance your personal life with your music career?'],
+    ['q22_causes',               'Causes or charities important to you as an artist?'],
+    ['q23_fan_moment',           'Most memorable moment of connecting with your fans?'],
+    ['q24_inspiration',          'How do you stay inspired and motivated to create new music?'],
+    ['q25_legacy',               'What legacy do you hope to leave in the music world?'],
+  ];
+
+  // Pronouns dropdown → custom-input toggle
+  const pronounsSelect = document.getElementById('artist_pronouns');
+  const pronounsCustom = document.getElementById('artist_pronouns_custom');
+  if (pronounsSelect && pronounsCustom) {
+    pronounsSelect.addEventListener('change', function() {
+      if (pronounsSelect.value === 'custom') {
+        pronounsCustom.style.display = 'block';
+        pronounsCustom.required = true;
+        pronounsCustom.focus();
+      } else {
+        pronounsCustom.style.display = 'none';
+        pronounsCustom.required = false;
+        pronounsCustom.value = '';
+      }
+      updateProgress();
+    });
+  }
+
+  // -------- Helpers --------
+  function showToast(msg, ms = 2400) {
+    toast.textContent = msg;
+    toast.classList.add('show');
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(() => toast.classList.remove('show'), ms);
+  }
+
+  function getFormData() {
+    const fd = new FormData(form);
+    const data = {};
+    for (const [k, v] of fd.entries()) data[k] = (v || '').toString().trim();
+    // Resolve pronouns: if "custom" was selected, use the custom field
+    if (data.artist_pronouns === 'custom') {
+      data.pronouns = data.artist_pronouns_custom || '';
+    } else {
+      data.pronouns = data.artist_pronouns || '';
+    }
+    delete data.artist_pronouns_custom;
+    return data;
+  }
+
+  function answeredCount(data) {
+    let n = 0;
+    for (const [key] of Q_LABELS) {
+      if (data[key] && data[key].length > 0) n++;
+    }
+    if (data.artist_name) n++;
+    if (data.artist_email) n++;
+    if (data.pronouns) n++;
+    return n;
+  }
+
+  function totalCount() {
+    return Q_LABELS.length + 3; // +3 for name + email + pronouns
+  }
+
+  function updateProgress() {
+    const data = getFormData();
+    const c = answeredCount(data);
+    const t = totalCount();
+    const pct = Math.round((c / t) * 100);
+    progressCount.textContent = c;
+    progressPct.textContent = pct + '%';
+    progressFill.style.width = pct + '%';
+  }
+
+  function escapeHTML(value) {
+    return String(value || '').replace(/[&<>"]/g, function(ch) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch];
+    });
+  }
+
+  function buildReview(data) {
+    const requiredAnswered = Q_LABELS.filter(([key]) => data[key]).length;
+    const items = [
+      ['Artist', data.artist_name],
+      ['Email', data.artist_email],
+      ['Pronouns', data.pronouns],
+      ['City / base', data.current_city || 'Not provided'],
+      ['Sonic identity', data.q16_style_genre || 'Not answered yet'],
+      ['Questions answered', requiredAnswered + ' of ' + Q_LABELS.length],
+    ];
+    reviewOutput.innerHTML = items.map(([label, value]) => `
+      <div class="review-item">
+        <span class="review-label">${escapeHTML(label)}</span>
+        <div class="review-value">${escapeHTML(value)}</div>
+      </div>
+    `).join('');
+  }
+
+  function renderStep(shouldScroll = false) {
+    sections.forEach((section, idx) => {
+      section.classList.toggle('active', idx === currentStep);
+      section.setAttribute('aria-hidden', idx === currentStep ? 'false' : 'true');
+    });
+    const last = currentStep === sections.length - 1;
+    prevStepBtn.disabled = currentStep === 0;
+    nextStepBtn.style.display = last ? 'none' : 'inline-flex';
+    submitBtn.style.display = last ? 'inline-flex' : 'none';
+    stepCurrent.textContent = currentStep + 1;
+    stepTotal.textContent = sections.length;
+    const copy = STEP_COPY[currentStep] || STEP_COPY[0];
+    stepEyebrow.textContent = copy[0];
+    stepPrompt.textContent = copy[1];
+    stepChips.innerHTML = sections.map((_, idx) => `<span class="step-chip ${idx === currentStep ? 'active' : idx < currentStep ? 'done' : ''}"></span>`).join('');
+    if (last) buildReview(getFormData());
+    updateProgress();
+    if (shouldScroll) {
+      document.querySelector('.progress-wrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
+
+  function validateStep(stepIdx) {
+    const data = getFormData();
+    if (stepIdx === 0) {
+      if (!data.artist_name) { showToast('First, enter your stage / artist name.'); document.getElementById('artist_name').focus(); return false; }
+      if (!data.artist_email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(data.artist_email)) {
+        showToast('Enter a valid email so we can send the bio back.');
+        document.getElementById('artist_email').focus();
+        return false;
+      }
+      if (!data.pronouns) { showToast('Select your pronouns before moving on.'); document.getElementById('artist_pronouns').focus(); return false; }
+      return true;
+    }
+    const currentSection = sections[stepIdx];
+    const missing = currentSection && Array.from(currentSection.querySelectorAll('[required]')).find((el) => !String(el.value || '').trim());
+    if (missing) {
+      const q = missing.id && missing.id.startsWith('q') ? missing.id.replace('q', '') : '';
+      showToast(q ? 'Please answer question ' + q + ' before moving on.' : 'Please complete this step before moving on.');
+      missing.focus();
+      return false;
+    }
+    return true;
+  }
+
+  function buildQA(data) {
+    // Format: each Q&A as "Question N\nAnswer N" per the user spec
+    const lines = [];
+    lines.push(`Artist Name: ${data.artist_name || ''}`);
+    lines.push(`Pronouns: ${data.pronouns || ''}`);
+    lines.push(`Email: ${data.artist_email || ''}`);
+    if (data.artist_phone) lines.push(`Phone: ${data.artist_phone}`);
+    if (data.artist_social) lines.push(`Primary Social: ${data.artist_social}`);
+    if (data.current_city) lines.push(`Current City: ${data.current_city}`);
+    lines.push('');
+    Q_LABELS.forEach(([key, label], idx) => {
+      lines.push(`Question ${idx + 1}`);
+      lines.push(label);
+      lines.push(`Answer ${idx + 1}`);
+      lines.push(data[key] || '');
+      lines.push('');
+    });
+    return lines.join('\n').trim();
+  }
+
+  // -------- Local-storage draft persistence --------
+  const DRAFT_KEY = 'loudmusic_bio_survey_draft_v1';
+  function saveDraftLocal() {
+    const data = getFormData();
+    try {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({ ts: Date.now(), data }));
+      showToast('Progress saved to this browser.');
+    } catch (e) {
+      showToast('Could not save locally (storage full or blocked).');
+    }
+  }
+  function loadDraftLocal() {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!parsed || !parsed.data) return;
+      for (const [k, v] of Object.entries(parsed.data)) {
+        const el = form.elements[k];
+        if (el && typeof v === 'string') el.value = v;
+      }
+      if (pronounsSelect) pronounsSelect.dispatchEvent(new Event('change'));
+      updateProgress();
+    } catch (e) { /* ignore */ }
+  }
+  function clearDraftLocal() {
+    try { localStorage.removeItem(DRAFT_KEY); } catch (e) { /* ignore */ }
+  }
+
+  // -------- Submission --------
+  async function submitForm(data) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span class="spinner"></span> Generating bio...';
+    try {
+      const res = await fetch(ENDPOINT, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': ANON_KEY,
+          'Authorization': 'Bearer ' + ANON_KEY,
+        },
+        body: JSON.stringify(data),
+      });
+      const text = await res.text();
+      let json = null;
+      try { json = text ? JSON.parse(text) : null; } catch (e) { /* non-JSON */ }
+      if (!res.ok) {
+        const msg = (json && (json.error || json.message)) || ('HTTP ' + res.status);
+        throw new Error(msg);
+      }
+      return { ok: true, response: json };
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Generate my bio →';
+    }
+  }
+
+  function showSuccess(data, response) {
+    const qa = (response && response.qa) || buildQA(data);
+    const bio = response && response.bio;
+    qaOutput.textContent = qa;
+    bioOutput.textContent = bio || 'Your survey was received, but the automated bio generator could not complete this run. Your raw Q&A is saved below for LOUDmusic to regenerate the bio.';
+    successCard.classList.add('show');
+    // Scroll the success card into view
+    setTimeout(() => {
+      successCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
+  }
+
+  // -------- Events --------
+  form.addEventListener('input', function() {
+    updateProgress();
+    if (currentStep === sections.length - 1) buildReview(getFormData());
+  });
+  form.addEventListener('change', function() {
+    updateProgress();
+    if (currentStep === sections.length - 1) buildReview(getFormData());
+  });
+  saveDraftBtn.addEventListener('click', saveDraftLocal);
+  prevStepBtn.addEventListener('click', function() {
+    if (currentStep > 0) {
+      currentStep -= 1;
+      renderStep(true);
+    }
+  });
+  nextStepBtn.addEventListener('click', function() {
+    if (!validateStep(currentStep)) return;
+    if (currentStep < sections.length - 1) {
+      currentStep += 1;
+      renderStep(true);
+    }
+  });
+
+  form.addEventListener('submit', async function(ev) {
+    ev.preventDefault();
+    if (currentStep < sections.length - 1) {
+      if (validateStep(currentStep)) {
+        currentStep += 1;
+        renderStep(true);
+      }
+      return;
+    }
+    const data = getFormData();
+
+    // Basic validation
+    if (!data.artist_name) { showToast('Please enter your stage / artist name.'); document.getElementById('artist_name').focus(); return; }
+    if (!data.artist_email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(data.artist_email)) {
+      showToast('Please enter a valid email so we can reach you.');
+      document.getElementById('artist_email').focus();
+      return;
+    }
+    if (!data.pronouns) {
+      showToast('Please select your pronouns (or enter custom).');
+      document.getElementById('artist_pronouns').focus();
+      return;
+    }
+    if (data.pronouns === 'custom' && !data.artist_pronouns_custom) {
+      showToast('Please enter your custom pronouns.');
+      document.getElementById('artist_pronouns_custom').focus();
+      return;
+    }
+    const missingIdx = Q_LABELS.findIndex(([key]) => !data[key]);
+    if (missingIdx !== -1) {
+      showToast('Please answer question ' + (missingIdx + 1) + ' before submitting.');
+      const el = document.getElementById('q' + (missingIdx + 1));
+      if (el) {
+        el.focus();
+        el.closest('.section').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      return;
+    }
+
+    try {
+      const result = await submitForm(data);
+      showSuccess(data, result.response);
+      clearDraftLocal();
+      showToast(result.response && result.response.bio ? 'Bio generated. Your bio kit is ready below.' : 'Survey received. Bio generation needs a retry.');
+    } catch (err) {
+      console.error('Submit failed', err);
+      // Even on backend failure, show the Q&A so the artist isn't blocked.
+      showSuccess(data, null);
+      showToast('Saved locally — could not reach the server. Your Q&A is below for recovery.');
+    }
+  });
+
+  copyBioBtn.addEventListener('click', async function() {
+    const text = bioOutput.textContent;
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast('Bio copied to clipboard.');
+    } catch (e) {
+      const range = document.createRange();
+      range.selectNodeContents(bioOutput);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      try {
+        document.execCommand('copy');
+        showToast('Bio copied.');
+      } catch (e2) {
+        showToast('Copy failed. Select the bio manually and press ⌘/Ctrl+C.');
+      }
+      sel.removeAllRanges();
+    }
+  });
+
+  downloadBioBtn.addEventListener('click', function() {
+    const text = bioOutput.textContent;
+    const name = (form.elements.artist_name.value || 'artist').replace(/[^a-z0-9_-]+/gi, '_');
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name + '_artist_bio.txt';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('Bio downloaded.');
+  });
+
+  copyQaBtn.addEventListener('click', async function() {
+    const text = qaOutput.textContent;
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast('Q&A copied to clipboard.');
+    } catch (e) {
+      // Fallback: select the text in the pre block
+      const range = document.createRange();
+      range.selectNodeContents(qaOutput);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      try {
+        document.execCommand('copy');
+        showToast('Q&A copied.');
+      } catch (e2) {
+        showToast('Copy failed. Select the text manually and press ⌘/Ctrl+C.');
+      }
+      sel.removeAllRanges();
+    }
+  });
+
+  downloadQaBtn.addEventListener('click', function() {
+    const text = qaOutput.textContent;
+    const name = (form.elements.artist_name.value || 'artist').replace(/[^a-z0-9_-]+/gi, '_');
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name + '_bio_survey_QA.txt';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('Q&A downloaded.');
+  });
+
+  // Initial load
+  loadDraftLocal();
+  renderStep(false);
+})();
+</script>
+</body>
+</html>
