@@ -57,6 +57,7 @@ log = configure_logging("ingest_sendpilot")
 
 BASE_URL = "https://api.sendpilot.ai/v1"
 DEFAULT_LOOKBACK_DAYS = 90
+DERRICK_SENDPILOT_ACCOUNT_ID = "cmqm3xikx1mu02m01qark2e47"
 PAGE_SIZE = 100
 EXTRACTOR_PAGE_SIZE = 100
 EXTRACTOR_DONE_STATUSES = frozenset(
@@ -537,6 +538,88 @@ def upsert_extractor_lead(sb: Client, lead: dict, campaign_uuid: str) -> bool:
         raise
 
 
+BATCH_SIZE = 100
+
+
+def bulk_upsert_leads(
+    sb: Client, lead_tuples: list[tuple[dict, str]]
+) -> int:
+    """Bulk upsert outreach leads into sendpilot_leads.
+
+    Accepts a list of (lead_dict, campaign_uuid) tuples, builds payloads
+    using the same _extract_lead_profile_fields() pattern as upsert_lead(),
+    and does a single .upsert(rows, on_conflict='external_id').execute()
+    per batch of BATCH_SIZE.  Returns the count of records written.
+    """
+    rows: list[dict] = []
+    for lead, campaign_uuid in lead_tuples:
+        profile = _extract_lead_profile_fields(lead)
+        title = lead.get("title") or _lead_data_blob(lead).get("title")
+        rows.append(
+            {
+                "external_id": lead["id"],
+                "campaign_id": campaign_uuid,
+                "linkedin_url": lead.get("linkedinUrl"),
+                "first_name": lead.get("firstName"),
+                "last_name": lead.get("lastName"),
+                "email": lead.get("email"),
+                "company": lead.get("company"),
+                "title": title,
+                "status": lead.get("status", "PENDING"),
+                "created_at": lead.get("createdAt"),
+                "updated_at": lead.get("updatedAt"),
+                **profile,
+            }
+        )
+
+    written = 0
+    for i in range(0, len(rows), BATCH_SIZE):
+        batch = rows[i : i + BATCH_SIZE]
+        sb.table("sendpilot_leads").upsert(batch, on_conflict="external_id").execute()
+        written += len(batch)
+    return written
+
+
+def bulk_upsert_extractor_leads(
+    sb: Client, lead_tuples: list[tuple[dict, str]]
+) -> int:
+    """Bulk upsert extractor leads into sendpilot_leads.
+
+    Same pattern as bulk_upsert_leads but uses _extract_extractor_lead_fields()
+    and the extractor payload shape from upsert_extractor_lead().
+    """
+    now = utcnow().isoformat()
+    rows: list[dict] = []
+    for lead, campaign_uuid in lead_tuples:
+        profile = _extract_extractor_lead_fields(lead)
+        lead_id = lead.get("id")
+        if not lead_id:
+            continue
+        rows.append(
+            {
+                "external_id": f"{EXTRACTOR_EXTERNAL_PREFIX}{lead_id}",
+                "campaign_id": campaign_uuid,
+                "linkedin_url": lead.get("linkedin_url"),
+                "first_name": lead.get("first_name"),
+                "last_name": lead.get("last_name"),
+                "email": lead.get("email"),
+                "company": lead.get("company"),
+                "title": lead.get("job_position"),
+                "status": "EXTRACTED",
+                "created_at": now,
+                "updated_at": now,
+                **profile,
+            }
+        )
+
+    written = 0
+    for i in range(0, len(rows), BATCH_SIZE):
+        batch = rows[i : i + BATCH_SIZE]
+        sb.table("sendpilot_leads").upsert(batch, on_conflict="external_id").execute()
+        written += len(batch)
+    return written
+
+
 def _parse_extractor_campaign_ids(raw: str | None) -> list[str]:
     if not raw or not raw.strip():
         return []
@@ -561,6 +644,34 @@ def _extractor_is_done(status: str | None) -> bool:
     if not status:
         return False
     return status.upper() in {"FINISHED", "COMPLETED"}
+
+
+def _should_sync_campaign(
+    sb: Client, external_id: str, api_updated_at: str | None
+) -> bool:
+    """Check if a campaign has changed since the last sync.
+
+    Returns True if the campaign should be synced (either it has never been
+    synced, or the API's updatedAt is newer than last_synced_at).
+    """
+    if not api_updated_at:
+        return True
+    rows = (
+        sb.table("sendpilot_campaigns")
+        .select("last_synced_at")
+        .eq("external_id", external_id)
+        .execute()
+    )
+    if not rows.data:
+        return True
+    last_synced = rows.data[0].get("last_synced_at")
+    if not last_synced:
+        return True
+    api_dt = parse_iso8601(api_updated_at)
+    sync_dt = parse_iso8601(last_synced)
+    if api_dt is None or sync_dt is None:
+        return True
+    return api_dt > sync_dt
 
 
 def ingest_extractor_campaigns(
@@ -594,10 +705,12 @@ def ingest_extractor_campaigns(
             continue
 
         lead_count = 0
+        leads_for_campaign: list[tuple[dict, str]] = []
         for lead in client.iter_extractor_results(ext_id):
-            if upsert_extractor_lead(sb, lead, camp_uuid):
-                written += 1
-                lead_count += 1
+            leads_for_campaign.append((lead, camp_uuid))
+        if leads_for_campaign:
+            written += bulk_upsert_extractor_leads(sb, leads_for_campaign)
+            lead_count = len(leads_for_campaign)
 
         sb.table("sendpilot_extractor_campaigns").update(
             {"last_results_sync_at": utcnow().isoformat(), "updated_at": utcnow().isoformat()}
@@ -621,11 +734,17 @@ def _parse_account_ids(raw: str | None) -> set[str] | None:
 
 
 def _resolve_account_filter(args: argparse.Namespace) -> set[str] | None:
-    """Account IDs to ingest; None means no filter (all org conversations)."""
+    """Account IDs to ingest.
+
+    Default is Derrick McMichael II's connected LinkedIn inbox/profile only.
+    The SendPilot API key can see multiple synced accounts; do not ingest the
+    org-wide inbox unless a human intentionally passes --account-ids for a
+    one-off diagnostic run.
+    """
     if args.account_ids:
         return _parse_account_ids(args.account_ids)
     env = getenv_optional("SENDPILOT_DASHBOARD_ACCOUNT_IDS")
-    return _parse_account_ids(env)
+    return _parse_account_ids(env) or {DERRICK_SENDPILOT_ACCOUNT_ID}
 
 
 def _resolve_since(sb: Client, args: argparse.Namespace) -> datetime | None:
@@ -675,10 +794,23 @@ def run(args: argparse.Namespace) -> int:
                 camp_uuid = upsert_campaign(sb, camp)
                 written += 1
                 if not args.skip_leads:
-                    lead_full = not args.skip_lead_enrichment
-                    for lead in client.iter_leads(camp["id"], full=lead_full):
-                        if upsert_lead(sb, lead, camp_uuid):
-                            written += 1
+                    if not _should_sync_campaign(sb, camp["id"], camp.get("updatedAt")):
+                        log.info(
+                            f"campaign {camp['id']} unchanged since last sync; "
+                            "skipping lead fetch"
+                        )
+                    else:
+                        lead_full = not args.skip_lead_enrichment
+                        leads_for_campaign: list[tuple[dict, str]] = []
+                        for lead in client.iter_leads(camp["id"], full=lead_full):
+                            leads_for_campaign.append((lead, camp_uuid))
+                        if leads_for_campaign:
+                            written += bulk_upsert_leads(sb, leads_for_campaign)
+                    # Mark the campaign as synced regardless (even if skipped,
+                    # the campaign row itself was upserted above).
+                    sb.table("sendpilot_campaigns").update(
+                        {"last_synced_at": utcnow().isoformat()}
+                    ).eq("external_id", camp["id"]).execute()
 
             # 1b. Lead extractor campaigns
             if not args.skip_extractor:
