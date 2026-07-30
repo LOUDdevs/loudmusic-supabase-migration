@@ -211,7 +211,7 @@ async function callOpenRouterChat(qa: string) {
           { role: "user", content: `Write a bio for this person.\n\n${qa}\n\nDeliver all four lengths plus 3–5 press angles. Hold the line on the hard rules. Flag bio gaps where needed — do not invent.` },
         ],
         temperature: 0.72,
-        max_tokens: 3200,
+        max_tokens: 1300,
       }),
       signal: controller.signal,
     });
@@ -236,8 +236,13 @@ async function generateArtistBio(data: SurveyData) {
   } catch (openaiError) {
     // Current OpenAI key can be over quota; don't block artists from receiving a bio.
     console.error("openai_generation_failed", openaiError instanceof Error ? openaiError.message : openaiError);
-    const generated = await callOpenRouterChat(qa);
-    return { ...generated, qa, fallback_from: "openai" };
+    try {
+      const generated = await callOpenRouterChat(qa);
+      return { ...generated, qa, fallback_from: "openai" };
+    } catch (openrouterError) {
+      console.error("openrouter_generation_failed", openrouterError instanceof Error ? openrouterError.message : openrouterError);
+      throw new Error("openai_and_openrouter_generation_failed");
+    }
   }
 }
 
@@ -422,23 +427,60 @@ Deno.serve(async (req) => {
 
   try {
     const generated = await generateArtistBio(cleanData);
+    // Persist the result
+    const { error: resultError } = await supabase
+      .from('artist_bio_survey_results')
+      .insert({
+        survey_id: inserted.id,
+        bio: generated.bio ?? null,
+        qa: generated.qa,
+        model: generated.model,
+        provider: generated.provider,
+        bio_status: generated.bio ? 'generated' : 'failed',
+        generated_at: generated.bio ? new Date().toISOString() : null,
+      });
+    if (resultError) {
+      console.error('bio_result_insert_failed', resultError);
+    }
     return json({
       ok: true,
       id: inserted.id,
       bio: generated.bio,
       model: generated.model,
       qa: generated.qa,
-      bio_status: "generated",
+      bio_status: generated.bio ? 'generated' : 'failed',
+
     });
   } catch (e) {
-    console.error("bio_generation_failed", e?.message ?? e);
+    console.error("bio_generation_failed", e instanceof Error ? e.message : e);
+    const generated = {
+      bio: null,
+      model: null,
+      provider: null,
+      qa: buildQA(cleanData),
+    };
+    // Persist the failed result
+    const { error: resultError } = await supabase
+      .from('artist_bio_survey_results')
+      .insert({
+        survey_id: inserted.id,
+        bio: null,
+        qa: generated.qa,
+        model: null,
+        provider: null,
+        bio_status: 'failed',
+        bio_error: 'bio_generation_failed',
+      });
+    if (resultError) {
+      console.error('bio_result_insert_failed', resultError);
+    }
     return json({
       ok: true,
       id: inserted.id,
       bio: null,
-      bio_status: "failed",
-      bio_error: "bio_generation_failed",
-      qa: buildQA(cleanData),
+      bio_status: 'failed',
+      bio_error: 'bio_generation_failed',
+      qa: generated.qa,
     });
   }
 });
