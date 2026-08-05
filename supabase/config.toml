@@ -4,6 +4,11 @@
 # working directory name when running `supabase init`.
 project_id = "hupiguhcsmeucownlbre"
 
+[functions.loudmusic-v1]
+# Public funnel pages/events are unauthenticated; protected CRM/admin routes
+# enforce bearer-token and workspace membership checks inside the function.
+verify_jwt = false
+
 [api]
 enabled = true
 # Port to use for the API URL.

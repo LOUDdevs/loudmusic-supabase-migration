@@ -229,8 +229,19 @@ async function publicFunnel(request: Request, slug: string) {
   return json(request, { data: { funnel, steps, versions: versionsResponse?.ok ? await versionsResponse.json() : [], edges: edgesResponse.ok ? await edgesResponse.json() : [] } });
 }
 
+function fletcherVisual(fletcher: DbRow): DbRow {
+  const track = ["artist", "label", "hub"].includes(String(fletcher.track)) ? String(fletcher.track) : "artist";
+  const accentTreatment = ["blue", "white"].includes(String(fletcher.accent_treatment)) ? String(fletcher.accent_treatment) : "blue";
+  const ctaStyle = ["solid", "outline"].includes(String(fletcher.cta_style)) ? String(fletcher.cta_style) : "solid";
+  const allowedSections = ["hero", "problem", "solution", "proof", "offer", "form"];
+  const requestedSections = Array.isArray(fletcher.section_order) && fletcher.section_order.length ? fletcher.section_order.map((item) => String(item).trim().toLowerCase()).filter((item) => allowedSections.includes(item)) : allowedSections;
+  const sectionOrder = requestedSections.length ? [...new Set(requestedSections)] : allowedSections;
+  return { track, hero_image: String(fletcher.hero_image ?? "").trim(), accent_treatment: accentTreatment, cta_style: ctaStyle, section_order: sectionOrder };
+}
+
 function fletcherBlocks(funnelName: string, settings: DbRow, stepName: string, stepType: string) {
   const fletcher = (settings.fletcher as DbRow | undefined) ?? {};
+  const visual = fletcherVisual(fletcher);
   const audience = String(fletcher.audience ?? "independent artists and music teams").trim();
   const problem = String(fletcher.problem ?? "You have momentum, but the next release or growth decision is unclear.").trim();
   const promise = String(fletcher.promise ?? `A clearer next move for ${audience}.`).trim();
@@ -238,8 +249,16 @@ function fletcherBlocks(funnelName: string, settings: DbRow, stepName: string, s
   const offer = String(fletcher.offer ?? "Start with a focused conversation about the next right move.").trim();
   const cta = String(fletcher.cta ?? "Start the conversation").trim();
   const fields = Array.isArray(fletcher.form_fields) && fletcher.form_fields.length ? fletcher.form_fields : [{ key: "name", label: "Name", type: "text", required: true }, { key: "email", label: "Email", type: "email", required: true }];
-  if (stepType === "confirmation_page") return [{ type: "eyebrow", text: funnelName }, { type: "heading", text: stepName || "You’re in." }, { type: "text", text: String(fletcher.confirmation_message ?? "Thanks. Your next step is recorded and the LOUDmusic team will follow up.") }];
-  return [{ type: "eyebrow", text: funnelName }, { type: "heading", text: promise }, { type: "text", text: problem }, { type: "proof", text: proof }, { type: "offer", text: offer }, { type: "form", fields, submitLabel: cta }, { type: "footnote", text: `Built for ${audience}.` }];
+  if (stepType === "confirmation_page") return [{ type: "eyebrow", text: funnelName, section: "hero" }, { type: "heading", text: stepName || "You’re in.", section: "hero" }, { type: "text", text: String(fletcher.confirmation_message ?? "Thanks. Your next step is recorded and the LOUDmusic team will follow up."), section: "solution" }];
+  const sections: Record<string, DbRow> = {
+    hero: { type: "hero", section: "hero", eyebrow: funnelName, headline: promise, text: `For ${audience}.`, image: visual.hero_image, imageAlt: `LOUDmusic ${visual.track} track`, ctaText: cta, ctaHref: "#form", track: visual.track },
+    problem: { type: "problem", section: "problem", label: "The tension", heading: "What gets in the way", text: problem },
+    solution: { type: "solution", section: "solution", label: "The move", heading: "A clearer way forward", text: promise },
+    proof: { type: "proof", section: "proof", label: "Proof", heading: "Built around your real situation", text: proof },
+    offer: { type: "offer", section: "offer", label: "The next step", heading: "Make the next move", text: offer, ctaText: cta, ctaHref: "#form" },
+    form: { type: "form", section: "form", fields, submitLabel: cta },
+  };
+  return (visual.section_order as string[]).map((section) => sections[section]).filter(Boolean);
 }
 
 function fletcherValidation(funnel: DbRow, steps: DbRow[], versions: DbRow[]) {
@@ -286,15 +305,15 @@ async function createFunnel(request: Request) {
   const body = await readJson(request); const name = String(body.name ?? "New funnel").trim().slice(0, 120); const slug = String(body.slug ?? body.basePath ?? name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")).replace(/^\/+|\/+$/g, "").slice(0, 80);
   if (!name || !slug) return json(request, { error: "Funnel name and slug are required" }, 400);
   const incomingFletcher = (body.settings as DbRow | undefined)?.fletcher;
-  const fletcher = incomingFletcher && typeof incomingFletcher === "object" ? incomingFletcher : { audience: String(body.audience ?? "").trim(), problem: String(body.problem ?? "").trim(), promise: String(body.promise ?? "").trim(), proof: String(body.proof ?? "").trim(), offer: String(body.offer ?? "").trim(), cta: String(body.cta ?? "Start the conversation").trim(), form_fields: body.form_fields };
-  const settings = { ...((body.settings as DbRow | undefined) ?? {}), fletcher };
+  const fletcher: DbRow = incomingFletcher && typeof incomingFletcher === "object" ? incomingFletcher as DbRow : { audience: String(body.audience ?? "").trim(), problem: String(body.problem ?? "").trim(), promise: String(body.promise ?? "").trim(), proof: String(body.proof ?? "").trim(), offer: String(body.offer ?? "").trim(), cta: String(body.cta ?? "Start the conversation").trim(), form_fields: body.form_fields };
+  const settings: DbRow = { ...((body.settings as DbRow | undefined) ?? {}), fletcher };
   const created = await dbFetch("funnel_funnels", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ workspace_id: viewer.user.workspaceId, name, slug, objective: String(body.objective ?? body.type ?? "lead_generation"), primary_goal: String(body.primary_goal ?? "form_submitted"), settings, created_by: viewer.user.id, updated_by: viewer.user.id }) });
   if (!created.ok) return json(request, { error: "Funnel could not be created" }, 400);
   const funnel = first(await created.json());
   if (!funnel) return json(request, { error: "Funnel could not be read after creation" }, 500);
   const stepResponse = await dbFetch("funnel_steps", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ funnel_id: funnel.id, step_key: "start", name: "Start", step_type: "landing", sort_order: 0, status: "draft" }) });
   const step = first(stepResponse.ok ? await stepResponse.json() : []);
-  if (step) await dbFetch("funnel_page_versions", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ step_id: step.id, version: 1, state: "draft", blocks: fletcherBlocks(name, settings, "Start", "landing"), styles: {}, metadata: { route: `/funnel/${slug}/start/`, seo_title: name, seo_description: String(fletcher.promise ?? "") }, created_by: viewer.user.id }) });
+  if (step) await dbFetch("funnel_page_versions", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ step_id: step.id, version: 1, state: "draft", blocks: fletcherBlocks(name, settings, "Start", "landing"), styles: {}, metadata: { route: `/funnel/${slug}/start/`, seo_title: name, seo_description: String((fletcher as DbRow).promise ?? ""), visual: fletcherVisual(fletcher) }, created_by: viewer.user.id }) });
   return json(request, { data: { funnel: { ...funnel, type: funnel.objective, basePath: funnel.slug }, step } }, 201);
 }
 
@@ -330,7 +349,7 @@ async function createStep(request: Request, funnelId: string) {
     body: JSON.stringify({
       step_id: step.id,
       version: 1,
-      metadata: { route: String(body.route ?? `/funnel/${funnel.slug}/${stepKey}/`), seo_title: String(body.seo_title ?? body.name ?? ""), seo_description: String(body.seo_description ?? "") },
+      metadata: { route: String(body.route ?? `/funnel/${funnel.slug}/${stepKey}/`), seo_title: String(body.seo_title ?? body.name ?? ""), seo_description: String(body.seo_description ?? ""), visual: fletcherVisual(((funnel.settings as DbRow | undefined)?.fletcher as DbRow | undefined) ?? {}) },
       blocks: Array.isArray(body.blocks) && body.blocks.length ? body.blocks : fletcherBlocks(String(funnel.name ?? "LOUDmusic"), (funnel.settings as DbRow | undefined) ?? {}, String(body.name ?? "New step"), String(body.step_type ?? body.stepType ?? "landing")),
       styles: body.styles ?? {},
     }),
