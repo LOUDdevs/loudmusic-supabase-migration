@@ -1,4 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { getFletcherTemplate, listFletcherTemplates, resolveVars } from "./fletcher-templates.ts";
+import { runFunnelBuilderTurn, normalizeCollectedVariables, type ChatMessage } from "./funnel-builder-chat.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -226,7 +228,10 @@ async function publicFunnel(request: Request, slug: string) {
   const stepIds = steps.map((step) => String(step.id));
   const versionsResponse = stepIds.length ? await dbFetch(`funnel_page_versions?step_id=in.(${stepIds.join(",")})&state=eq.published&select=step_id,version,state,blocks,styles,metadata`) : null;
   const edgesResponse = await dbFetch(`funnel_step_edges?funnel_id=eq.${funnel.id}&select=from_step_id,to_step_id,condition,is_default`);
-  return json(request, { data: { funnel, steps, versions: versionsResponse?.ok ? await versionsResponse.json() : [], edges: edgesResponse.ok ? await edgesResponse.json() : [] } });
+  const variables = ((funnel.settings as DbRow | undefined)?.variables as FunnelVariables | undefined) ?? {};
+  const rawVersions = (versionsResponse?.ok ? await versionsResponse.json() : []) as DbRow[];
+  const resolvedVersions = rawVersions.map((v) => ({ ...v, blocks: resolveVars(v.blocks, variables) }));
+  return json(request, { data: { funnel, steps, versions: resolvedVersions, edges: edgesResponse.ok ? await edgesResponse.json() : [] } });
 }
 
 function fletcherVisual(fletcher: DbRow): DbRow {
@@ -261,11 +266,36 @@ function fletcherBlocks(funnelName: string, settings: DbRow, stepName: string, s
   return (visual.section_order as string[]).map((section) => sections[section]).filter(Boolean);
 }
 
+// Unauthenticated preview of a single page by step id, regardless of
+// publish status — lets the funnel builder link straight to a draft page
+// without sharing an admin session across the admin app and the public
+// site. The step id (a random UUID) is the only access control here, same
+// tradeoff most "preview link" features make; draft marketing copy isn't
+// sensitive enough to warrant full auth for this.
+async function funnelPreview(request: Request, stepId: string) {
+  const stepResponse = await dbFetch(`funnel_steps?id=eq.${encodeURIComponent(stepId)}&select=*&limit=1`);
+  const step = first<DbRow>(stepResponse.ok ? await stepResponse.json() : []);
+  if (!step) return json(request, { error: "Page not found" }, 404);
+  const funnelResponse = await dbFetch(`funnel_funnels?id=eq.${step.funnel_id}&select=id,name,slug,settings&limit=1`);
+  const funnel = first<DbRow>(funnelResponse.ok ? await funnelResponse.json() : []);
+  if (!funnel) return json(request, { error: "Page not found" }, 404);
+  const versionResponse = await dbFetch(`funnel_page_versions?step_id=eq.${stepId}&select=*&order=version.desc&limit=1`);
+  const version = first<DbRow>(versionResponse.ok ? await versionResponse.json() : []);
+  if (!version) return json(request, { error: "This page has no content yet" }, 404);
+  const variables = ((funnel.settings as DbRow | undefined)?.variables as FunnelVariables | undefined) ?? {};
+  return json(request, { data: { funnel: { id: funnel.id, name: funnel.name, slug: funnel.slug }, step: { id: step.id, step_key: step.step_key, name: step.name, status: step.status }, version: { ...version, blocks: resolveVars(version.blocks, variables) } } });
+}
+
 function fletcherValidation(funnel: DbRow, steps: DbRow[], versions: DbRow[]) {
-  const fletcher = ((funnel.settings as DbRow | undefined)?.fletcher as DbRow | undefined) ?? {};
   const errors: Array<{ code: string; message: string; stepId?: string }> = [];
-  const required: Array<[string, string]> = [["audience", "Define who this funnel is for."], ["problem", "State the problem the audience is trying to solve."], ["promise", "State the promised outcome."], ["offer", "Describe the offer or next step."], ["cta", "Define the call to action."]];
-  for (const [key, message] of required) if (!String(fletcher[key] ?? "").trim()) errors.push({ code: `fletcher_${key}_missing`, message });
+  const templateKey = (funnel.settings as DbRow | undefined)?.template;
+  if (!templateKey) {
+    // Legacy single-page "custom" funnel — the manual audience/problem/
+    // promise/offer/cta fields are its only content, so they're required.
+    const fletcher = ((funnel.settings as DbRow | undefined)?.fletcher as DbRow | undefined) ?? {};
+    const required: Array<[string, string]> = [["audience", "Define who this funnel is for."], ["problem", "State the problem the audience is trying to solve."], ["promise", "State the promised outcome."], ["offer", "Describe the offer or next step."], ["cta", "Define the call to action."]];
+    for (const [key, message] of required) if (!String(fletcher[key] ?? "").trim()) errors.push({ code: `fletcher_${key}_missing`, message });
+  }
   if (!steps.length) errors.push({ code: "steps_missing", message: "Add at least one website subpage before publishing." });
   for (const step of steps) {
     const version = versions.find((candidate) => String(candidate.step_id) === String(step.id) && ["draft", "published"].includes(String(candidate.state)));
@@ -297,12 +327,154 @@ async function funnelDetail(request: Request, id: string) {
   ]);
   const events = stats.ok ? await stats.json() : [];
   const byStep: Record<string, number> = {}; for (const event of events as DbRow[]) { const key = String(event.step_id ?? "funnel"); byStep[key] = (byStep[key] ?? 0) + 1; }
-  return json(request, { data: { funnel, steps: steps.ok ? await steps.json() : [], versions: versions.ok ? await versions.json() : [], edges: edges.ok ? await edges.json() : [], analytics: { totalEvents: events.length, byStep } } });
+  const variables = ((funnel.settings as DbRow | undefined)?.variables as FunnelVariables | undefined) ?? {};
+  const rawVersions = (versions.ok ? await versions.json() : []) as DbRow[];
+  const resolvedVersions = rawVersions.map((v) => ({ ...v, blocks: resolveVars(v.blocks, variables) }));
+  return json(request, { data: { funnel, steps: steps.ok ? await steps.json() : [], versions: resolvedVersions, edges: edges.ok ? await edges.json() : [], analytics: { totalEvents: events.length, byStep } } });
+}
+
+async function listFunnelTemplates(request: Request) {
+  const viewer = await requireViewer(request); if ("error" in viewer) return json(request, { error: viewer.error }, viewer.status);
+  return json(request, { data: { templates: listFletcherTemplates() } });
+}
+
+// Creates a funnel from a Fletcher Method template (Zero Selling System /
+// Winning Workshop): every step and its first page version are generated
+// from the template in one shot, using real Fletcher copy — not a form the
+// user has to fill in with placeholder marketing text. `body.variables`
+// (business name, presenter, workshop date, price, etc.) overrides the
+// template's defaults and is stored on the funnel so editing it later
+// updates every page that references it (see resolveVars).
+async function createFunnelFromTemplate(request: Request, body: DbRow, viewer: { user: Viewer }) {
+  const templateKey = String(body.template ?? "");
+  const template = getFletcherTemplate(templateKey);
+  if (!template) return json(request, { error: `Unknown funnel template "${templateKey}"` }, 400);
+  const name = String(body.name ?? template.name).trim().slice(0, 120);
+  const slug = String(body.slug ?? body.basePath ?? name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")).replace(/^\/+|\/+$/g, "").slice(0, 80);
+  if (!name || !slug) return json(request, { error: "Funnel name and slug are required" }, 400);
+  const variables: FunnelVariables = { ...template.defaultVariables, ...((body.variables as DbRow | undefined) ?? {}) };
+  const settings: DbRow = { template: template.key, templateVersion: template.version, requiredStepKeys: template.requiredStepKeys, variables };
+
+  const created = await dbFetch("funnel_funnels", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ workspace_id: viewer.user.workspaceId, name, slug, objective: String(body.objective ?? body.type ?? "lead_generation"), primary_goal: String(body.primary_goal ?? "form_submitted"), settings, created_by: viewer.user.id, updated_by: viewer.user.id }) });
+  if (!created.ok) return json(request, { error: "Funnel could not be created" }, 400);
+  const funnel = first(await created.json());
+  if (!funnel) return json(request, { error: "Funnel could not be read after creation" }, 500);
+
+  const createdSteps: DbRow[] = [];
+  for (let i = 0; i < template.steps.length; i++) {
+    const stepDef = template.steps[i];
+    const stepResponse = await dbFetch("funnel_steps", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ funnel_id: funnel.id, step_key: stepDef.stepKey, name: stepDef.name, step_type: stepDef.stepType, sort_order: i, status: "draft" }) });
+    const step = first(stepResponse.ok ? await stepResponse.json() : []);
+    if (!step) continue;
+    createdSteps.push(step);
+    await dbFetch("funnel_page_versions", {
+      method: "POST",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ step_id: step.id, version: 1, state: "draft", blocks: stepDef.blocks, styles: {}, metadata: { route: `/funnel/${slug}/${stepDef.stepKey}/`, seo_title: `${name} — ${stepDef.name}`, funnel_template: template.key }, created_by: viewer.user.id }),
+    });
+  }
+  // Chain steps in template order as the default path (registration -> confirmation -> replay, etc).
+  for (let i = 0; i < createdSteps.length - 1; i++) {
+    await dbFetch("funnel_step_edges", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ funnel_id: funnel.id, from_step_id: createdSteps[i].id, to_step_id: createdSteps[i + 1].id, is_default: true }) });
+  }
+  return json(request, { data: { funnel: { ...funnel, type: funnel.objective, basePath: funnel.slug }, step: createdSteps[0], steps: createdSteps } }, 201);
+}
+
+// ---------------------------------------------------------------------------
+// Conversational funnel builder — replaces the manual variables form. One
+// question at a time; once the LLM signals it has everything, the funnel is
+// instantiated immediately with every page (never a partial, page-by-page
+// funnel).
+// ---------------------------------------------------------------------------
+
+async function startFunnelBuilder(request: Request) {
+  const viewer = await requireViewer(request); if ("error" in viewer) return json(request, { error: viewer.error }, viewer.status);
+  const body = await readJson(request);
+  const templateKey = String(body.template ?? "");
+  const template = getFletcherTemplate(templateKey);
+  if (!template) return json(request, { error: `Unknown funnel template "${templateKey}"` }, 400);
+
+  const created = await dbFetch("funnel_builder_conversations", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ workspace_id: viewer.user.workspaceId, template_key: templateKey, created_by: viewer.user.id }) });
+  if (!created.ok) return json(request, { error: "Could not start the funnel builder" }, 400);
+  const conversation = first<{ id: string }>(await created.json());
+  if (!conversation) return json(request, { error: "Could not start the funnel builder" }, 500);
+
+  const kickoff: ChatMessage[] = [{ role: "user", content: "I'd like to set up a new funnel. Let's get started." }];
+  let turn;
+  try {
+    turn = await runFunnelBuilderTurn(templateKey, kickoff);
+  } catch (err) {
+    console.error("funnel_builder_start_failed", err instanceof Error ? err.message : err);
+    return json(request, { error: "The funnel builder assistant is unavailable right now — please try again shortly." }, 502);
+  }
+  const messages = [...kickoff, { role: "assistant", content: JSON.stringify(turn) }];
+  await dbFetch(`funnel_builder_conversations?id=eq.${conversation.id}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ messages }) });
+
+  return json(request, { data: { conversation_id: conversation.id, message: turn.type === "question" ? turn.text : "", done: false } }, 201);
+}
+
+async function replyFunnelBuilder(request: Request, conversationId: string) {
+  const viewer = await requireViewer(request); if ("error" in viewer) return json(request, { error: viewer.error }, viewer.status);
+  const body = await readJson(request);
+  const userMessage = String(body.message ?? "").trim();
+  if (!userMessage) return json(request, { error: "message is required" }, 400);
+
+  const convResponse = await dbFetch(`funnel_builder_conversations?id=eq.${encodeURIComponent(conversationId)}&workspace_id=eq.${viewer.user.workspaceId}&select=*&limit=1`);
+  const conversation = first<DbRow>(convResponse.ok ? await convResponse.json() : []);
+  if (!conversation) return json(request, { error: "Conversation not found" }, 404);
+  if (conversation.status !== "active") return json(request, { error: "This funnel setup conversation has already finished" }, 409);
+
+  const templateKey = String(conversation.template_key);
+  const history = [...((conversation.messages as ChatMessage[] | undefined) ?? []).map((m) => ({ role: m.role, content: typeof m.content === "string" && m.role === "assistant" ? (JSON.parse(m.content)?.text ?? m.content) : m.content })), { role: "user" as const, content: userMessage }];
+
+  let turn;
+  try {
+    turn = await runFunnelBuilderTurn(templateKey, history);
+  } catch (err) {
+    console.error("funnel_builder_reply_failed", err instanceof Error ? err.message : err);
+    return json(request, { error: "The funnel builder assistant is unavailable right now — please try again shortly." }, 502);
+  }
+
+  const rawMessages = [...((conversation.messages as ChatMessage[] | undefined) ?? []), { role: "user", content: userMessage }, { role: "assistant", content: JSON.stringify(turn) }];
+
+  if (turn.type === "question") {
+    await dbFetch(`funnel_builder_conversations?id=eq.${conversationId}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ messages: rawMessages }) });
+    return json(request, { data: { conversation_id: conversationId, message: turn.text, done: false } });
+  }
+
+  // Done — instantiate the full funnel (every page) right now from the
+  // gathered answers, falling back to the template's own defaults for
+  // anything the model didn't manage to collect.
+  const variables = normalizeCollectedVariables(templateKey, turn.variables, templateDefaults(templateKey));
+  const template = getFletcherTemplate(templateKey);
+  const funnelName = variables.businessName ? `${String(variables.businessName)} — ${template?.name ?? templateKey}` : undefined;
+  const funnelResult = await createFunnelFromTemplate(request, { template: templateKey, name: funnelName, variables }, viewer);
+  const funnelPayload = await funnelResult.json().catch(() => null);
+  const funnel = funnelPayload?.data?.funnel;
+
+  await dbFetch(`funnel_builder_conversations?id=eq.${conversationId}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({ messages: rawMessages, collected_variables: variables, status: "completed", funnel_id: funnel?.id ?? null }),
+  });
+
+  // Field is deliberately not named "funnel" — the admin API client's
+  // envelope-unwrapping treats any {data:{funnel:{...}}} shape specially
+  // and would silently strip conversation_id/done from this response.
+  return json(request, { data: { conversation_id: conversationId, done: true, createdFunnel: funnel } });
+}
+
+function templateDefaults(templateKey: string): Record<string, unknown> {
+  const template = getFletcherTemplate(templateKey);
+  return (template?.defaultVariables as Record<string, unknown>) ?? {};
 }
 
 async function createFunnel(request: Request) {
   const viewer = await requireViewer(request); if ("error" in viewer) return json(request, { error: viewer.error }, viewer.status);
-  const body = await readJson(request); const name = String(body.name ?? "New funnel").trim().slice(0, 120); const slug = String(body.slug ?? body.basePath ?? name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")).replace(/^\/+|\/+$/g, "").slice(0, 80);
+  const body = await readJson(request);
+  if (body.template && String(body.template) !== "custom") return createFunnelFromTemplate(request, body, viewer);
+
+  const name = String(body.name ?? "New funnel").trim().slice(0, 120); const slug = String(body.slug ?? body.basePath ?? name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")).replace(/^\/+|\/+$/g, "").slice(0, 80);
   if (!name || !slug) return json(request, { error: "Funnel name and slug are required" }, 400);
   const incomingFletcher = (body.settings as DbRow | undefined)?.fletcher;
   const fletcher: DbRow = incomingFletcher && typeof incomingFletcher === "object" ? incomingFletcher as DbRow : { audience: String(body.audience ?? "").trim(), problem: String(body.problem ?? "").trim(), promise: String(body.promise ?? "").trim(), proof: String(body.proof ?? "").trim(), offer: String(body.offer ?? "").trim(), cta: String(body.cta ?? "Start the conversation").trim(), form_fields: body.form_fields };
@@ -387,6 +559,36 @@ async function publishFunnel(request: Request, funnelId: string) {
   }
   await dbFetch(`funnel_funnels?id=eq.${funnelId}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ status: "published", updated_by: viewer.user.id }) });
   return json(request, { data: { published: true, funnel_id: funnelId, routes: steps.map((step) => `/funnel/${funnel.slug}/${step.step_key}/`) } });
+}
+
+// Publishes a single page independently of the rest of the funnel — the
+// funnel-wide publish button above still exists, but a Fletcher Method
+// funnel's pages are commonly reviewed and pushed live one at a time.
+async function publishStep(request: Request, stepId: string) {
+  const viewer = await requireViewer(request); if ("error" in viewer) return json(request, { error: viewer.error }, viewer.status);
+  const stepResponse = await dbFetch(`funnel_steps?id=eq.${encodeURIComponent(stepId)}&select=*&limit=1`);
+  const step = first<DbRow>(stepResponse.ok ? await stepResponse.json() : []);
+  if (!step) return json(request, { error: "Page not found" }, 404);
+  const funnelResponse = await dbFetch(`funnel_funnels?id=eq.${step.funnel_id}&workspace_id=eq.${viewer.user.workspaceId}&select=id,slug,status&limit=1`);
+  const funnel = first<DbRow>(funnelResponse.ok ? await funnelResponse.json() : []);
+  if (!funnel) return json(request, { error: "Page not found" }, 404);
+
+  const versionsResponse = await dbFetch(`funnel_page_versions?step_id=eq.${stepId}&select=*&order=version.desc`);
+  const versions = (versionsResponse.ok ? await versionsResponse.json() : []) as DbRow[];
+  const latestDraft = versions.find((v) => v.state === "draft");
+  const latestAny = versions[0];
+  if (!latestDraft && !(latestAny && latestAny.state === "published")) return json(request, { error: "This page has no content to publish yet." }, 422);
+  const toPublish = latestDraft ?? latestAny;
+  if (!Array.isArray(toPublish?.blocks) || !(toPublish!.blocks as unknown[]).length) return json(request, { error: "This page has no content to publish yet." }, 422);
+
+  if (latestDraft) {
+    await dbFetch(`funnel_page_versions?step_id=eq.${stepId}&state=eq.published`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ state: "superseded" }) });
+    await dbFetch(`funnel_page_versions?id=eq.${latestDraft.id}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ state: "published", published_at: new Date().toISOString() }) });
+  }
+  await dbFetch(`funnel_steps?id=eq.${stepId}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ status: "published" }) });
+  if (funnel.status === "draft") await dbFetch(`funnel_funnels?id=eq.${funnel.id}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ status: "published", updated_by: viewer.user.id }) });
+
+  return json(request, { data: { published: true, step_id: stepId, route: `/funnel/${funnel.slug}/${step.step_key}/` } });
 }
 
 async function workflows(request: Request) {
@@ -746,6 +948,7 @@ Deno.serve(async (request: Request) => {
   try {
     if (request.method === "GET" && path === "/health") return json(request, { data: { status: "ok", version: VERSION, service: "loudmusic-v1" } });
     if (request.method === "GET" && path.startsWith("/public/funnels/")) return publicFunnel(request, path.split("/")[3]);
+    if (request.method === "GET" && path.startsWith("/funnel-preview/")) return funnelPreview(request, path.split("/")[2]);
     if (request.method === "POST" && path === "/auth/login") return authLogin(request);
     if (request.method === "POST" && path === "/auth/refresh") return authRefresh(request);
     if (request.method === "GET" && path === "/auth/me") { const viewer = await requireViewer(request); return "error" in viewer ? json(request, { error: viewer.error }, viewer.status) : json(request, { data: viewer.user }); }
@@ -757,6 +960,9 @@ Deno.serve(async (request: Request) => {
     if (request.method === "GET" && path === "/crm/pipelines") return pipelines(request);
     if (request.method === "POST" && path === "/crm/deals") return createDeal(request);
     if (request.method === "PATCH" && path.startsWith("/crm/deals/")) return updateDeal(request, path.split("/")[3]);
+    if (request.method === "GET" && path === "/funnel-templates") return listFunnelTemplates(request);
+    if (request.method === "POST" && path === "/funnel-builder/start") return startFunnelBuilder(request);
+    if (request.method === "POST" && path.startsWith("/funnel-builder/") && path.endsWith("/reply")) return replyFunnelBuilder(request, path.split("/")[2]);
     if (request.method === "GET" && path === "/funnels") return funnels(request);
     if (request.method === "POST" && path === "/funnels") return createFunnel(request);
     if (request.method === "PATCH" && path.startsWith("/funnels/") && path.split("/").length === 3) return updateFunnel(request, path.split("/")[2]);
@@ -765,6 +971,7 @@ Deno.serve(async (request: Request) => {
     if (request.method === "POST" && path.startsWith("/funnels/") && path.endsWith("/steps")) return createStep(request, path.split("/")[2]);
     if (request.method === "POST" && path.startsWith("/funnels/") && path.endsWith("/publish")) return publishFunnel(request, path.split("/")[2]);
     if (request.method === "POST" && path.startsWith("/funnel-steps/") && path.endsWith("/draft")) return saveDraft(request, path.split("/")[2]);
+    if (request.method === "POST" && path.startsWith("/funnel-steps/") && path.endsWith("/publish")) return publishStep(request, path.split("/")[2]);
     if (request.method === "GET" && path === "/workflows") return workflows(request);
     if (request.method === "POST" && path === "/workflows") return createWorkflow(request);
     if (request.method === "PATCH" && path.startsWith("/workflows/") && path.split("/").length === 3) return updateWorkflow(request, path.split("/")[2]);
