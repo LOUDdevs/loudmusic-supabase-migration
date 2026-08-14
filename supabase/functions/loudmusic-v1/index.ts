@@ -1,13 +1,14 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { getFletcherTemplate, listFletcherTemplates, resolveVars } from "./fletcher-templates.ts";
 import { runFunnelBuilderTurn, normalizeCollectedVariables, type ChatMessage } from "./funnel-builder-chat.ts";
+import {
+  SUPABASE_URL, SERVICE_KEY, ANON_KEY, DEFAULT_WORKSPACE,
+  type Viewer, type DbRow,
+  corsHeaders, json, dbFetch, readJson, first, workspaceFor, requireViewer, countRows, slugify,
+} from "./_shared.ts";
+import * as jobBoard from "./job-board.ts";
 
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
-const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 const VERSION = "1.1.0";
-const ALLOWED_ORIGINS = new Set(["https://stg.loudmusic.io", "https://loudmusic.io", "http://localhost:5175", "http://localhost:5174"]);
-const DEFAULT_WORKSPACE = "loudmusic";
 
 const legacyFeatures = [
   { name: "Release and distribution", status: "mapped", note: "DDEX Wizard + LabelGrid workflows are inventoried; provider writes stay behind a reviewed server integration." },
@@ -16,69 +17,6 @@ const legacyFeatures = [
   { name: "Commerce and verification", status: "mapped", note: "WooCommerce, Stripe, FastCredit, and Plaid are identified; raw card data will never enter LOUDmusic systems." },
   { name: "Support and CRM", status: "connected", note: "Supabase Auth, tenant-safe CRM foundations, funnel events, and workflow review queues are live behind this API." },
 ];
-
-type Viewer = { id: string; email: string; name: string; role: string; workspaceId: string };
-
-type DbRow = Record<string, unknown>;
-
-function corsHeaders(request: Request) {
-  const origin = request.headers.get("Origin") ?? "";
-  const allowed = ALLOWED_ORIGINS.has(origin) ? origin : "https://stg.loudmusic.io";
-  return { "Access-Control-Allow-Origin": allowed, "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-idempotency-key", "Access-Control-Allow-Methods": "GET, POST, PATCH, PUT, OPTIONS", "Access-Control-Allow-Credentials": "true", "Vary": "Origin" };
-}
-
-function json(request: Request, payload: unknown, status = 200) {
-  return new Response(JSON.stringify(payload), { status, headers: { "Content-Type": "application/json; charset=utf-8", ...corsHeaders(request) } });
-}
-
-async function dbFetch(path: string, init: RequestInit = {}) {
-  const headers = new Headers(init.headers);
-  headers.set("apikey", SERVICE_KEY);
-  headers.set("Authorization", `Bearer ${SERVICE_KEY}`);
-  headers.set("Accept-Profile", "marketing");
-  headers.set("Content-Profile", "marketing");
-  headers.set("Content-Type", "application/json");
-  return fetch(`${SUPABASE_URL}/rest/v1/${path}`, { ...init, headers });
-}
-
-async function readJson(request: Request): Promise<DbRow> {
-  try { return await request.json(); } catch { return {}; }
-}
-
-function first<T extends DbRow>(rows: unknown): T | null {
-  return Array.isArray(rows) && rows.length ? rows[0] as T : null;
-}
-
-async function workspaceFor(slug = DEFAULT_WORKSPACE) {
-  const response = await dbFetch(`workspaces?slug=eq.${encodeURIComponent(slug)}&select=id,slug,name&limit=1`);
-  return first<{ id: string; slug: string; name: string }>(response.ok ? await response.json() : []);
-}
-
-async function requireViewer(request: Request): Promise<{ user: Viewer } | { error: string; status: number }> {
-  const header = request.headers.get("Authorization") ?? "";
-  if (!header.startsWith("Bearer ")) return { error: "Authentication required", status: 401 };
-  const token = header.slice(7);
-  const auth = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { apikey: ANON_KEY, Authorization: `Bearer ${token}` } });
-  if (!auth.ok) return { error: "Invalid or expired session", status: 401 };
-  const user = await auth.json();
-  const workspace = await workspaceFor();
-  if (!workspace) return { error: "Workspace is not configured", status: 500 };
-  const memberResponse = await dbFetch(`workspace_members?workspace_id=eq.${encodeURIComponent(workspace.id)}&user_id=eq.${encodeURIComponent(user.id)}&select=role&limit=1`);
-  const members = memberResponse.ok ? await memberResponse.json() : [];
-  if (!members.length) return { error: "Workspace access has not been granted", status: 403 };
-  return { user: { id: user.id, email: user.email, name: user.user_metadata?.full_name ?? user.email, role: members[0].role, workspaceId: workspace.id } };
-}
-
-async function countRows(table: string, workspaceId?: string) {
-  const [resource, rawQuery] = table.split("?", 2);
-  const params = new URLSearchParams(rawQuery ?? "");
-  params.set("select", "id"); params.set("limit", "1");
-  if (workspaceId) params.set("workspace_id", `eq.${workspaceId}`);
-  const response = await dbFetch(`${resource}?${params.toString()}`, { headers: { Prefer: "count=exact" } });
-  const range = response.headers.get("content-range") ?? "*/0";
-  const total = Number(range.split("/")[1] ?? 0);
-  return Number.isFinite(total) ? total : 0;
-}
 
 async function authLogin(request: Request) {
   const body = await readJson(request);
@@ -817,7 +755,7 @@ async function deleteTask(request: Request, id: string) {
 }
 
 // COMPANIES / ORGANIZATIONS ENDPOINTS
-const COMPANY_SELECT = "id,name,domain,industry,employee_count,website,phone,location,timezone,description,owner_id,team_id,source,archived_at,created_at,updated_at";
+const COMPANY_SELECT = "id,name,domain,industry,employee_count,website,phone,location,timezone,description,owner_id,team_id,source,archived_at,created_at,updated_at,logo_url,cover_image_url,company_size,founded_year,headquarters,social_links,benefits,culture,photos,verified,is_employer,public_slug";
 const COMPANY_SORTS: Record<string, string> = {
   name: "name", created: "created_at", createdAt: "created_at", updated: "updated_at", updatedAt: "updated_at", industry: "industry",
 };
@@ -831,9 +769,21 @@ function companyPayload(body: DbRow, workspaceId: string, userId: string, isCrea
   if (employeeCount !== undefined && (!Number.isInteger(employeeCount) || employeeCount < 0)) return { error: "employeeCount must be a non-negative integer" };
   const payload: DbRow = { workspace_id: workspaceId, updated_by: userId };
   if (isCreate || body.name !== undefined) payload.name = name;
-  const fields: Array<[string, string]> = [["domain", "domain"], ["industry", "industry"], ["website", "website"], ["phone", "phone"], ["location", "location"], ["timezone", "timezone"], ["description", "description"], ["source", "source"]];
+  const fields: Array<[string, string]> = [
+    ["domain", "domain"], ["industry", "industry"], ["website", "website"], ["phone", "phone"], ["location", "location"], ["timezone", "timezone"], ["description", "description"], ["source", "source"],
+    ["logoUrl", "logo_url"], ["coverImageUrl", "cover_image_url"], ["companySize", "company_size"], ["headquarters", "headquarters"], ["culture", "culture"], ["publicSlug", "public_slug"],
+  ];
   for (const [camel, snake] of fields) if (body[camel] !== undefined || body[snake] !== undefined) payload[snake] = String(body[camel] ?? body[snake] ?? "").trim().slice(0, 1000) || null;
   if (employeeCount !== undefined) payload.employee_count = employeeCount;
+  const foundedValue = body.foundedYear ?? body.founded_year;
+  if (foundedValue !== undefined) payload.founded_year = foundedValue === null || foundedValue === "" ? null : Number(foundedValue);
+  for (const [camel, snake] of [["socialLinks", "social_links"], ["benefits", "benefits"], ["photos", "photos"]]) {
+    const value = body[camel] ?? body[snake];
+    if (value !== undefined) payload[snake] = value ?? (snake === "social_links" ? {} : []);
+  }
+  for (const [camel, snake] of [["verified", "verified"], ["isEmployer", "is_employer"]]) {
+    if (body[camel] !== undefined || body[snake] !== undefined) payload[snake] = Boolean(body[camel] ?? body[snake]);
+  }
   for (const [camel, snake] of [["ownerId", "owner_id"], ["teamId", "team_id"]]) {
     if (body[camel] !== undefined || body[snake] !== undefined) {
       const value = body[camel] ?? body[snake]; const parsed = optionalUuid(value);
@@ -991,6 +941,69 @@ Deno.serve(async (request: Request) => {
     if (request.method === "POST" && path === "/tasks") return createTask(request);
     if (request.method === "PATCH" && path.startsWith("/tasks/") && !path.endsWith("/notes")) return updateTask(request, path.split("/")[2]);
     if (request.method === "DELETE" && path.startsWith("/tasks/")) return deleteTask(request, path.split("/")[2]);
+
+    // ---- Job board: public ----
+    if (request.method === "GET" && path === "/jobs/categories") return jobBoard.listJobCategoriesPublic(request);
+    if (request.method === "GET" && path === "/jobs/saved") return jobBoard.listSavedJobs(request);
+    if (request.method === "POST" && path === "/jobs/saved") return jobBoard.saveJob(request);
+    if (request.method === "DELETE" && path === "/jobs/saved") return jobBoard.unsaveJob(request);
+    if (request.method === "GET" && path === "/jobs/alerts") return jobBoard.listAlerts(request);
+    if (request.method === "POST" && path === "/jobs/alerts") return jobBoard.createAlert(request);
+    if (request.method === "PATCH" && path.startsWith("/jobs/alerts/")) return jobBoard.updateAlert(request, path.split("/")[3]);
+    if (request.method === "DELETE" && path.startsWith("/jobs/alerts/")) return jobBoard.deleteAlert(request, path.split("/")[3]);
+    if (request.method === "GET" && path.startsWith("/jobs/company/")) return jobBoard.getCompanyPublic(request, path.split("/")[3]);
+    if (request.method === "GET" && path === "/jobs") return jobBoard.listJobsPublic(request);
+    if (request.method === "POST" && path.startsWith("/jobs/") && path.endsWith("/apply")) return jobBoard.applyToJob(request, path.split("/")[2]);
+    if (request.method === "POST" && path.startsWith("/jobs/") && path.endsWith("/event")) return jobBoard.recordJobEvent(request, path.split("/")[2]);
+    if (request.method === "GET" && path.startsWith("/jobs/") && path.split("/").length === 3) return jobBoard.getJobPublic(request, path.split("/")[2]);
+
+    // ---- Job board: admin ----
+    if (request.method === "GET" && path === "/admin/jobs/stats") return jobBoard.adminJobsStats(request);
+    if (request.method === "GET" && path === "/admin/jobs/export") return jobBoard.adminExportJobsCsv(request);
+    if (request.method === "GET" && path === "/admin/jobs/moderation") return jobBoard.adminModerationQueue(request);
+    if (request.method === "POST" && path === "/admin/jobs/bulk") return jobBoard.adminBulkJobs(request);
+    if (request.method === "GET" && path === "/admin/jobs") return jobBoard.adminListJobs(request);
+    if (request.method === "POST" && path === "/admin/jobs") return jobBoard.adminCreateJob(request);
+    if (request.method === "POST" && path.startsWith("/admin/jobs/") && path.endsWith("/publish")) return jobBoard.adminPublishJob(request, path.split("/")[3]);
+    if (request.method === "POST" && path.startsWith("/admin/jobs/") && path.endsWith("/pause")) return jobBoard.adminPauseJob(request, path.split("/")[3]);
+    if (request.method === "POST" && path.startsWith("/admin/jobs/") && path.endsWith("/fill")) return jobBoard.adminFillJob(request, path.split("/")[3]);
+    if (request.method === "POST" && path.startsWith("/admin/jobs/") && path.endsWith("/archive")) return jobBoard.adminArchiveJob(request, path.split("/")[3]);
+    if (request.method === "POST" && path.startsWith("/admin/jobs/") && path.endsWith("/submit")) return jobBoard.adminSubmitForApproval(request, path.split("/")[3]);
+    if (request.method === "POST" && path.startsWith("/admin/jobs/") && path.endsWith("/duplicate")) return jobBoard.adminDuplicateJob(request, path.split("/")[3]);
+    if (request.method === "POST" && path.startsWith("/admin/jobs/") && path.endsWith("/moderate")) return jobBoard.adminModerateJob(request, path.split("/")[3]);
+    if (request.method === "PUT" && path.startsWith("/admin/jobs/") && path.endsWith("/questions")) return jobBoard.adminSetJobQuestions(request, path.split("/")[3]);
+    if (request.method === "GET" && path.startsWith("/admin/jobs/") && path.split("/").length === 4) return jobBoard.adminGetJob(request, path.split("/")[3]);
+    if (request.method === "PATCH" && path.startsWith("/admin/jobs/") && path.split("/").length === 4) return jobBoard.adminUpdateJob(request, path.split("/")[3]);
+    if (request.method === "DELETE" && path.startsWith("/admin/jobs/") && path.split("/").length === 4) return jobBoard.adminDeleteJob(request, path.split("/")[3]);
+
+    if (request.method === "GET" && path === "/admin/applications/export") return jobBoard.adminExportApplicationsCsv(request);
+    if (request.method === "GET" && path === "/admin/applications") return jobBoard.adminListApplications(request);
+    if (request.method === "PATCH" && path.startsWith("/admin/applications/") && path.endsWith("/stage")) return jobBoard.adminUpdateApplicationStage(request, path.split("/")[3]);
+    if (request.method === "POST" && path.startsWith("/admin/applications/") && path.endsWith("/notes")) return jobBoard.adminAddApplicationNote(request, path.split("/")[3]);
+    if (request.method === "GET" && path.startsWith("/admin/applications/") && path.endsWith("/resume")) return jobBoard.adminApplicationResumeUrl(request, path.split("/")[3]);
+    if (request.method === "GET" && path.startsWith("/admin/applications/") && path.split("/").length === 4) return jobBoard.adminGetApplication(request, path.split("/")[3]);
+    if (request.method === "PATCH" && path.startsWith("/admin/applications/") && path.split("/").length === 4) return jobBoard.adminUpdateApplication(request, path.split("/")[3]);
+
+    if (request.method === "GET" && path === "/admin/job-categories") return jobBoard.jobCategories.list(request);
+    if (request.method === "POST" && path === "/admin/job-categories") return jobBoard.jobCategories.create(request);
+    if (request.method === "PATCH" && path.startsWith("/admin/job-categories/")) return jobBoard.jobCategories.update(request, path.split("/")[3]);
+    if (request.method === "DELETE" && path.startsWith("/admin/job-categories/")) return jobBoard.jobCategories.remove(request, path.split("/")[3]);
+
+    if (request.method === "GET" && path === "/admin/job-departments") return jobBoard.jobDepartments.list(request);
+    if (request.method === "POST" && path === "/admin/job-departments") return jobBoard.jobDepartments.create(request);
+    if (request.method === "PATCH" && path.startsWith("/admin/job-departments/")) return jobBoard.jobDepartments.update(request, path.split("/")[3]);
+    if (request.method === "DELETE" && path.startsWith("/admin/job-departments/")) return jobBoard.jobDepartments.remove(request, path.split("/")[3]);
+
+    if (request.method === "GET" && path === "/admin/hiring-stages") return jobBoard.hiringStages.list(request);
+    if (request.method === "POST" && path === "/admin/hiring-stages") return jobBoard.hiringStages.create(request);
+    if (request.method === "PATCH" && path.startsWith("/admin/hiring-stages/")) return jobBoard.hiringStages.update(request, path.split("/")[3]);
+    if (request.method === "DELETE" && path.startsWith("/admin/hiring-stages/")) return jobBoard.hiringStages.remove(request, path.split("/")[3]);
+
+    if (request.method === "GET" && path === "/admin/job-settings") return jobBoard.adminGetSettings(request);
+    if (request.method === "PATCH" && path.startsWith("/admin/job-settings/")) return jobBoard.adminUpdateSettings(request, path.split("/")[3]);
+
+    if (request.method === "GET" && path === "/admin/job-audit-log") return jobBoard.adminAuditLog(request);
+
     return json(request, { error: "Route not found" }, 404);
   } catch (error) {
     console.error("loudmusic-v1", error instanceof Error ? error.message : "unknown error");
