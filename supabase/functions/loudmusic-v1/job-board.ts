@@ -568,6 +568,11 @@ export async function adminGetApplication(request: Request, id: string) {
   ]);
   const application = first<DbRow>(appRes.ok ? await appRes.json() : []);
   if (!application) return json(request, { error: "Application not found" }, 404);
+  const email = String(application.email ?? "").trim().toLowerCase();
+  const contactRes = email
+    ? await dbFetch(`crm_contacts?workspace_id=eq.${viewer.user.workspaceId}&primary_email=ilike.${encodeURIComponent(email)}&deleted_at=is.null&select=id,display_name&limit=1`)
+    : new Response("[]", { status: 200 });
+  const contact = first<DbRow>(contactRes.ok ? await contactRes.json() : []);
   return json(request, {
     data: {
       application,
@@ -575,8 +580,115 @@ export async function adminGetApplication(request: Request, id: string) {
       notes: notesRes.ok ? await notesRes.json() : [],
       history: historyRes.ok ? await historyRes.json() : [],
       attachments: attachmentsRes.ok ? await attachmentsRes.json() : [],
+      contact: contact ? { id: contact.id, display_name: contact.display_name } : null,
     },
   });
+}
+
+function applicationContactContext(application: DbRow, answers: DbRow[], attachments: DbRow[]) {
+  return {
+    application_id: application.id,
+    posting_id: application.posting_id,
+    job: application.posting ?? null,
+    source: application.source ?? "direct",
+    current_stage: application.current_stage ?? "new",
+    rating: application.rating ?? null,
+    tags: application.tags ?? [],
+    assigned_to: application.assigned_to ?? null,
+    location: application.location ?? null,
+    applied_at: application.created_at ?? null,
+    updated_at: application.updated_at ?? null,
+    cover_letter: application.cover_letter ?? null,
+    social_links: {
+      linkedin: application.linkedin_url ?? null,
+      portfolio: application.portfolio_url ?? null,
+      website: application.website_url ?? null,
+    },
+    resume: application.resume_path ? { filename: application.resume_filename ?? null } : null,
+    attachments: attachments.map((attachment) => ({
+      id: attachment.id,
+      filename: attachment.file_name ?? attachment.filename ?? null,
+    })),
+    screening_answers: answers.map((answer) => ({
+      question_id: answer.question_id,
+      question: answer.question ?? null,
+      answer: answer.answer ?? "",
+    })),
+  };
+}
+
+export async function adminSaveApplicationContact(request: Request, id: string) {
+  const viewer = await requireViewer(request);
+  if ("error" in viewer) return json(request, { error: viewer.error }, viewer.status);
+
+  const appRes = await dbFetch(`jobs_applications?id=eq.${encodeURIComponent(id)}&workspace_id=eq.${viewer.user.workspaceId}&select=*,posting:jobs_postings(id,title,slug)&limit=1`);
+  const application = first<DbRow>(appRes.ok ? await appRes.json() : []);
+  if (!application) return json(request, { error: "Application not found" }, 404);
+
+  const [answersRes, attachmentsRes] = await Promise.all([
+    dbFetch(`jobs_application_answers?application_id=eq.${encodeURIComponent(id)}&select=*,question:jobs_questions(label,question_type)`),
+    dbFetch(`jobs_application_attachments?application_id=eq.${encodeURIComponent(id)}&select=*`),
+  ]);
+  const answers = answersRes.ok ? await answersRes.json() as DbRow[] : [];
+  const attachments = attachmentsRes.ok ? await attachmentsRes.json() as DbRow[] : [];
+
+  const email = String(application.email ?? "").trim().toLowerCase();
+  const phone = String(application.phone ?? "").trim();
+  const fullName = `${String(application.first_name ?? "").trim()} ${String(application.last_name ?? "").trim()}`.trim() || email || "Applicant";
+  let existing: DbRow | null = null;
+  if (email) {
+    const response = await dbFetch(`crm_contacts?workspace_id=eq.${viewer.user.workspaceId}&primary_email=ilike.${encodeURIComponent(email)}&deleted_at=is.null&select=*&limit=1`);
+    existing = first<DbRow>(response.ok ? await response.json() : []);
+  }
+  if (!existing && phone) {
+    const response = await dbFetch(`crm_contacts?workspace_id=eq.${viewer.user.workspaceId}&primary_phone=eq.${encodeURIComponent(phone)}&deleted_at=is.null&select=*&limit=1`);
+    existing = first<DbRow>(response.ok ? await response.json() : []);
+  }
+  if (!existing) {
+    const response = await dbFetch(`crm_contacts?workspace_id=eq.${viewer.user.workspaceId}&display_name=eq.${encodeURIComponent(fullName)}&deleted_at=is.null&select=*&limit=1`);
+    existing = first<DbRow>(response.ok ? await response.json() : []);
+  }
+
+  const context = applicationContactContext(application, answers, attachments);
+  const previousFields = (existing?.custom_fields && typeof existing.custom_fields === "object") ? existing.custom_fields as DbRow : {};
+  const previousApplications = Array.isArray(previousFields.job_applications) ? previousFields.job_applications as DbRow[] : [];
+  const applications = [...previousApplications.filter((item) => String(item.application_id) !== String(id)), context];
+  const payload: DbRow = {
+    workspace_id: viewer.user.workspaceId,
+    display_name: existing?.display_name || fullName,
+    first_name: application.first_name || existing?.first_name || null,
+    last_name: application.last_name || existing?.last_name || null,
+    primary_email: email || existing?.primary_email || null,
+    primary_phone: phone || existing?.primary_phone || null,
+    emails: email ? [{ value: email, type: "personal" }] : (existing?.emails ?? []),
+    phones: phone ? [{ value: phone, type: "personal" }] : (existing?.phones ?? []),
+    lifecycle_stage: existing?.lifecycle_stage ?? "lead",
+    lead_source: application.source || existing?.lead_source || "job_board",
+    custom_fields: { ...previousFields, job_application: context, job_applications: applications },
+    updated_by: viewer.user.id,
+  };
+
+  const response = existing
+    ? await dbFetch(`crm_contacts?id=eq.${encodeURIComponent(String(existing.id))}&workspace_id=eq.${viewer.user.workspaceId}&deleted_at=is.null`, { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify(payload) })
+    : await dbFetch("crm_contacts", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ ...payload, created_by: viewer.user.id }) });
+  if (!response.ok) return json(request, { error: "Applicant could not be saved to Contacts" }, 400);
+  const contact = first<DbRow>(await response.json());
+  if (!contact) return json(request, { error: "Applicant contact was not returned" }, 500);
+
+  await dbFetch("crm_activity_logs", {
+    method: "POST",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({
+      workspace_id: viewer.user.workspaceId,
+      entity_type: "contact",
+      entity_id: contact.id,
+      action: "job_application_saved",
+      actor_user_id: viewer.user.id,
+      metadata: { application_id: id, posting_id: application.posting_id, job_title: (application.posting as DbRow | undefined)?.title ?? null },
+    }),
+  }).catch(() => {});
+
+  return json(request, { data: { contact, created: !existing, application_id: id } });
 }
 
 export async function adminUpdateApplicationStage(request: Request, id: string) {
@@ -629,6 +741,23 @@ export async function adminApplicationResumeUrl(request: Request, id: string) {
   const signed = await signRes.json().catch(() => ({}));
   if (!signRes.ok || !signed.signedURL) return json(request, { error: "Could not generate download link" }, 500);
   return json(request, { data: { url: `${SUPABASE_URL}/storage/v1${signed.signedURL}`, filename: app.resume_filename } });
+}
+
+export async function adminApplicationAttachmentUrl(request: Request, applicationId: string, attachmentId: string) {
+  const viewer = await requireViewer(request);
+  if ("error" in viewer) return json(request, { error: viewer.error }, viewer.status);
+  const application = first<DbRow>(await (await dbFetch(`jobs_applications?id=eq.${encodeURIComponent(applicationId)}&workspace_id=eq.${viewer.user.workspaceId}&select=id&limit=1`)).json());
+  if (!application) return json(request, { error: "Application not found" }, 404);
+  const attachment = first<DbRow>(await (await dbFetch(`jobs_application_attachments?id=eq.${encodeURIComponent(attachmentId)}&application_id=eq.${encodeURIComponent(applicationId)}&select=file_name,file_path&limit=1`)).json());
+  if (!attachment?.file_path) return json(request, { error: "Attachment not found" }, 404);
+  const signRes = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/job-applications/${attachment.file_path}`, {
+    method: "POST",
+    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ expiresIn: 600 }),
+  });
+  const signed = await signRes.json().catch(() => ({}));
+  if (!signRes.ok || !signed.signedURL) return json(request, { error: "Could not generate download link" }, 500);
+  return json(request, { data: { url: `${SUPABASE_URL}/storage/v1${signed.signedURL}`, filename: attachment.file_name ?? attachment.file_path } });
 }
 
 export async function adminExportApplicationsCsv(request: Request) {

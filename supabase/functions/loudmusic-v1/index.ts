@@ -7,6 +7,12 @@ import {
   corsHeaders, json, dbFetch, readJson, first, workspaceFor, requireViewer, countRows, slugify,
 } from "./_shared.ts";
 import * as jobBoard from "./job-board.ts";
+import * as pipeline from "./pipeline.ts";
+import * as sequences from "./sequences.ts";
+import * as messageTemplates from "./message-templates.ts";
+import * as automations from "./automations.ts";
+import * as reports from "./reports.ts";
+import { runEngineTick } from "./engine.ts";
 
 const VERSION = "1.1.0";
 
@@ -91,17 +97,10 @@ async function contactDetail(request: Request, id: string) {
   const viewer = await requireViewer(request);
   if ("error" in viewer) return json(request, { error: viewer.error }, viewer.status);
   const w = viewer.user.workspaceId;
-  const [contactResponse, notesResponse, commsResponse, activityResponse, eventsResponse, enrollmentsResponse] = await Promise.all([
-    dbFetch(`crm_contacts?id=eq.${encodeURIComponent(id)}&workspace_id=eq.${w}&select=*&limit=1`),
-    dbFetch(`crm_notes?contact_id=eq.${encodeURIComponent(id)}&workspace_id=eq.${w}&select=id,body,pinned,created_at,created_by&order=created_at.desc&limit=100`),
-    dbFetch(`crm_communications?contact_id=eq.${encodeURIComponent(id)}&select=id,body,channel,direction,status,occurred_at&order=occurred_at.desc&limit=100`),
-    dbFetch(`crm_activity_logs?entity_id=eq.${encodeURIComponent(id)}&workspace_id=eq.${w}&select=id,action,metadata,actor_user_id,created_at&order=created_at.desc&limit=100`),
-    dbFetch(`funnel_events?contact_id=eq.${encodeURIComponent(id)}&workspace_id=eq.${w}&select=id,event_name,funnel_id,step_id,occurred_at,payload&order=occurred_at.desc&limit=100`),
-    dbFetch(`funnel_workflow_enrollments?contact_id=eq.${encodeURIComponent(id)}&workspace_id=eq.${w}&select=id,workflow_id,status,current_step_key,enrolled_at,next_run_at,completed_at&order=enrolled_at.desc&limit=50`),
-  ]);
+  const contactResponse = await dbFetch(`crm_contacts?id=eq.${encodeURIComponent(id)}&workspace_id=eq.${w}&select=*&limit=1`);
   const contact = first(contactResponse.ok ? await contactResponse.json() : []);
   if (!contact) return json(request, { error: "Contact not found" }, 404);
-  return json(request, { data: { contact, notes: notesResponse.ok ? await notesResponse.json() : [], communications: commsResponse.ok ? await commsResponse.json() : [], activity: activityResponse.ok ? await activityResponse.json() : [], funnelEvents: eventsResponse.ok ? await eventsResponse.json() : [], enrollments: enrollmentsResponse.ok ? await enrollmentsResponse.json() : [] } });
+  return json(request, { data: contact });
 }
 
 async function pipelines(request: Request) {
@@ -978,8 +977,10 @@ Deno.serve(async (request: Request) => {
 
     if (request.method === "GET" && path === "/admin/applications/export") return jobBoard.adminExportApplicationsCsv(request);
     if (request.method === "GET" && path === "/admin/applications") return jobBoard.adminListApplications(request);
+    if (request.method === "POST" && path.startsWith("/admin/applications/") && path.endsWith("/contact")) return jobBoard.adminSaveApplicationContact(request, path.split("/")[3]);
     if (request.method === "PATCH" && path.startsWith("/admin/applications/") && path.endsWith("/stage")) return jobBoard.adminUpdateApplicationStage(request, path.split("/")[3]);
     if (request.method === "POST" && path.startsWith("/admin/applications/") && path.endsWith("/notes")) return jobBoard.adminAddApplicationNote(request, path.split("/")[3]);
+    if (request.method === "GET" && path.includes("/attachments/") && path.startsWith("/admin/applications/")) return jobBoard.adminApplicationAttachmentUrl(request, path.split("/")[3], path.split("/")[5]);
     if (request.method === "GET" && path.startsWith("/admin/applications/") && path.endsWith("/resume")) return jobBoard.adminApplicationResumeUrl(request, path.split("/")[3]);
     if (request.method === "GET" && path.startsWith("/admin/applications/") && path.split("/").length === 4) return jobBoard.adminGetApplication(request, path.split("/")[3]);
     if (request.method === "PATCH" && path.startsWith("/admin/applications/") && path.split("/").length === 4) return jobBoard.adminUpdateApplication(request, path.split("/")[3]);
@@ -1003,6 +1004,68 @@ Deno.serve(async (request: Request) => {
     if (request.method === "PATCH" && path.startsWith("/admin/job-settings/")) return jobBoard.adminUpdateSettings(request, path.split("/")[3]);
 
     if (request.method === "GET" && path === "/admin/job-audit-log") return jobBoard.adminAuditLog(request);
+
+    // ---- Pipeline: pipelines / stages / win-loss reasons / opportunities ----
+    if (request.method === "GET" && path === "/pipelines") return pipeline.listPipelines(request);
+    if (request.method === "GET" && path.startsWith("/pipelines/") && path.endsWith("/stages")) return pipeline.listPipelineStages(request, path.split("/")[2]);
+    if (request.method === "GET" && path.startsWith("/pipelines/") && path.endsWith("/win-loss-reasons")) return pipeline.listPipelineWinLossReasons(request, path.split("/")[2]);
+    if (request.method === "POST" && path.startsWith("/pipelines/") && path.endsWith("/win-loss-reasons")) return pipeline.createPipelineWinLossReason(request, path.split("/")[2]);
+    if (request.method === "GET" && path === "/opportunities") return pipeline.listOpportunities(request);
+    if (request.method === "POST" && path === "/opportunities") return pipeline.createOpportunity(request);
+    if (request.method === "POST" && path.startsWith("/opportunities/") && path.endsWith("/restore")) return pipeline.restoreOpportunity(request, path.split("/")[2]);
+    if (request.method === "POST" && path.startsWith("/opportunities/") && path.endsWith("/move-stage")) return pipeline.moveOpportunityStage(request, path.split("/")[2]);
+    if (request.method === "GET" && path.startsWith("/opportunities/") && path.endsWith("/stage-history")) return pipeline.getOpportunityStageHistory(request, path.split("/")[2]);
+    if (request.method === "GET" && path.startsWith("/opportunities/") && path.split("/").length === 3) return pipeline.getOpportunity(request, path.split("/")[2]);
+    if (request.method === "PATCH" && path.startsWith("/opportunities/") && path.split("/").length === 3) return pipeline.updateOpportunity(request, path.split("/")[2]);
+    if (request.method === "DELETE" && path.startsWith("/opportunities/") && path.split("/").length === 3) return pipeline.archiveOpportunity(request, path.split("/")[2]);
+
+    // ---- Sequences ----
+    if (request.method === "GET" && path === "/sequences") return sequences.listSequences(request);
+    if (request.method === "POST" && path === "/sequences") return sequences.createSequence(request);
+    if (request.method === "GET" && path.startsWith("/sequences/") && path.endsWith("/versions")) return sequences.listSequenceVersions(request, path.split("/")[2]);
+    if (request.method === "POST" && path.startsWith("/sequences/") && path.endsWith("/versions")) return sequences.createSequenceVersion(request, path.split("/")[2]);
+    if (request.method === "POST" && path.startsWith("/sequences/") && path.endsWith("/publish")) return sequences.publishSequence(request, path.split("/")[2]);
+    if (request.method === "GET" && path.startsWith("/sequences/") && path.endsWith("/analytics")) return sequences.getSequenceAnalytics(request, path.split("/")[2]);
+    if (request.method === "GET" && path.startsWith("/sequences/") && path.split("/").length === 3) return sequences.getSequence(request, path.split("/")[2]);
+    if (request.method === "PATCH" && path.startsWith("/sequences/") && path.split("/").length === 3) return sequences.updateSequence(request, path.split("/")[2]);
+    if (request.method === "DELETE" && path.startsWith("/sequences/") && path.split("/").length === 3) return sequences.deleteSequence(request, path.split("/")[2]);
+    if (request.method === "GET" && path.startsWith("/sequence-versions/") && path.endsWith("/steps")) return sequences.listSequenceSteps(request, path.split("/")[2]);
+    if (request.method === "POST" && path.startsWith("/sequence-versions/") && path.endsWith("/steps")) return sequences.createSequenceStep(request, path.split("/")[2]);
+    if (request.method === "PATCH" && path.startsWith("/sequence-steps/")) return sequences.updateSequenceStep(request, path.split("/")[2]);
+    if (request.method === "DELETE" && path.startsWith("/sequence-steps/")) return sequences.deleteSequenceStep(request, path.split("/")[2]);
+    if (request.method === "GET" && path === "/enrollments") return sequences.listEnrollments(request);
+    if (request.method === "POST" && path === "/enrollments") return sequences.createEnrollment(request);
+    if (request.method === "POST" && path.startsWith("/enrollments/") && path.endsWith("/pause")) return sequences.pauseEnrollment(request, path.split("/")[2]);
+    if (request.method === "POST" && path.startsWith("/enrollments/") && path.endsWith("/resume")) return sequences.resumeEnrollment(request, path.split("/")[2]);
+    if (request.method === "DELETE" && path.startsWith("/enrollments/")) return sequences.removeEnrollment(request, path.split("/")[2]);
+
+    // ---- Message templates ----
+    if (request.method === "GET" && path === "/message-templates") return messageTemplates.listMessageTemplates(request);
+    if (request.method === "POST" && path === "/message-templates") return messageTemplates.createMessageTemplate(request);
+    if (request.method === "POST" && path.startsWith("/message-templates/") && path.endsWith("/test-send")) return messageTemplates.testSendMessageTemplate(request, path.split("/")[2]);
+    if (request.method === "GET" && path.startsWith("/message-templates/") && path.split("/").length === 3) return messageTemplates.getMessageTemplate(request, path.split("/")[2]);
+    if (request.method === "PATCH" && path.startsWith("/message-templates/") && path.split("/").length === 3) return messageTemplates.updateMessageTemplate(request, path.split("/")[2]);
+    if (request.method === "DELETE" && path.startsWith("/message-templates/") && path.split("/").length === 3) return messageTemplates.deleteMessageTemplate(request, path.split("/")[2]);
+
+    // ---- Automations ----
+    if (request.method === "GET" && path === "/automations") return automations.listAutomations(request);
+    if (request.method === "POST" && path === "/automations") return automations.createAutomation(request);
+    if (request.method === "GET" && path.startsWith("/automations/") && path.endsWith("/versions")) return automations.listAutomationVersions(request, path.split("/")[2]);
+    if (request.method === "POST" && path.startsWith("/automations/") && path.endsWith("/versions")) return automations.createAutomationVersion(request, path.split("/")[2]);
+    if (request.method === "POST" && path.startsWith("/automations/") && path.endsWith("/publish")) return automations.publishAutomation(request, path.split("/")[2]);
+    if (request.method === "GET" && path.startsWith("/automations/") && path.endsWith("/executions")) return automations.listAutomationExecutions(request, path.split("/")[2]);
+    if (request.method === "GET" && path.startsWith("/automations/") && path.split("/").length === 3) return automations.getAutomation(request, path.split("/")[2]);
+    if (request.method === "PATCH" && path.startsWith("/automations/") && path.split("/").length === 3) return automations.updateAutomation(request, path.split("/")[2]);
+    if (request.method === "DELETE" && path.startsWith("/automations/") && path.split("/").length === 3) return automations.deleteAutomation(request, path.split("/")[2]);
+    if (request.method === "POST" && path.startsWith("/automation-executions/") && path.endsWith("/retry")) return automations.retryAutomationExecution(request, path.split("/")[2]);
+    if (request.method === "POST" && path.startsWith("/automation-executions/") && path.endsWith("/skip")) return automations.skipAutomationExecution(request, path.split("/")[2]);
+    if (request.method === "GET" && path.startsWith("/automation-executions/")) return automations.getAutomationExecution(request, path.split("/")[2]);
+
+    // ---- Reports ----
+    if (request.method === "GET" && path.startsWith("/analytics/reports/")) return reports.getAnalyticsReport(request, path.split("/")[3]);
+
+    // ---- Background engine (pg_cron -> pg_net, shared-secret authenticated) ----
+    if (request.method === "POST" && path === "/engine/tick") return runEngineTick(request);
 
     return json(request, { error: "Route not found" }, 404);
   } catch (error) {
