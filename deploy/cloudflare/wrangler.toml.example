@@ -1,0 +1,18 @@
+# Copy this file to wrangler.staging.toml or wrangler.production.toml and replace every REPLACE_* value.
+# Keep those environment-specific files out of Git if they contain infrastructure identifiers.
+name = "REPLACE_LOUDAPP_GATEWAY_NAME"
+main = "loudapp-api-gateway.js"
+compatibility_date = "2026-09-09"
+workers_dev = false
+
+[vars]
+ENVIRONMENT = "REPLACE_staging_OR_production"
+UPSTREAM_API_BASE_URL = "https://REPLACE_SUPABASE_PROJECT_REF.supabase.co/functions/v1/loudapp-api-v1"
+ALLOWED_ORIGINS = "https://REPLACE_APP_DOMAIN"
+
+# Configure a Cloudflare Rate Limiting binding in the dashboard or with your account's
+# namespace ID before production. The Worker also remains safe when the binding is absent
+# during local smoke tests.
+# [[ratelimits]]
+# name = "API_RATE_LIMITER"
+# namespace_id = "REPLACE_CLOUDFLARE_RATE_LIMIT_NAMESPACE_ID"

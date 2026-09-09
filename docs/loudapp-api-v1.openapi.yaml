@@ -1,0 +1,181 @@
+openapi: 3.1.0
+info:
+  title: LOUDapp API
+  version: 1.0.0
+  description: Versioned API boundary for LOUDmusic web, Flutter, and machine integrations.
+servers:
+  - url: https://api.loudmusic.io
+    description: Production Cloudflare gateway
+  - url: https://staging-api.loudmusic.io
+    description: Staging Cloudflare gateway
+  - url: http://127.0.0.1:4310
+    description: Local compatibility gateway
+security:
+  - bearerAuth: []
+tags:
+  - name: health
+  - name: account
+  - name: settings
+  - name: playlist
+  - name: api-keys
+  - name: storage
+paths:
+  /health:
+    get:
+      security: []
+      tags: [health]
+      responses:
+        '200':
+          description: Healthy
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Success' }
+  /v1/health:
+    get:
+      security: []
+      tags: [health]
+      responses:
+        '200': { description: Healthy }
+  /v1/workspace:
+    get:
+      tags: [account]
+      responses:
+        '200':
+          description: Current workspace
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Success' } }
+  /v1/profile:
+    get:
+      tags: [account]
+      responses: { '200': { description: Profile } }
+    patch:
+      tags: [account]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                display_name: { type: [string, 'null'], maxLength: 160 }
+                avatar_url: { type: [string, 'null'], maxLength: 2048 }
+      responses: { '200': { description: Updated profile } }
+  /v1/settings/{section}:
+    parameters:
+      - name: section
+        in: path
+        required: true
+        schema: { type: string, pattern: '^[a-z][a-z0-9-]{0,63}$' }
+    get:
+      tags: [settings]
+      responses: { '200': { description: Settings section } }
+    patch:
+      tags: [settings]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, properties: { value: {} } }
+      responses: { '200': { description: Updated settings section } }
+  /v1/playlist/submissions:
+    get:
+      tags: [playlist]
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Offset' }
+      responses: { '200': { description: Playlist submissions } }
+    post:
+      tags: [playlist]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [track_url]
+              properties:
+                track_url: { type: string, format: uri, maxLength: 2048 }
+                track_title: { type: string, maxLength: 500 }
+                playlist_ids: { type: array, maxItems: 100, items: { type: string, maxLength: 200 } }
+      responses:
+        '201': { description: Created submission }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /v1/api-keys:
+    get:
+      tags: [api-keys]
+      responses: { '200': { description: Safe API-key metadata; digests are never returned } }
+    post:
+      tags: [api-keys]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 120 }
+                environment: { type: string, enum: [test, live] }
+                scopes: { type: array, items: { type: string } }
+                expires_at: { type: [string, 'null'], format: date-time }
+      responses:
+        '201': { description: Plaintext key is returned exactly once }
+  /v1/api-keys/{id}:
+    delete:
+      tags: [api-keys]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses: { '200': { description: Revoked key } }
+  /v1/storage/files:
+    get:
+      tags: [storage]
+      responses: { '200': { description: File metadata } }
+    post:
+      tags: [storage]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                bucket: { type: string, default: loudapp-private }
+                original_name: { type: string, maxLength: 512 }
+                mime_type: { type: [string, 'null'], maxLength: 255 }
+                byte_size: { type: [integer, 'null'], minimum: 0 }
+      responses: { '201': { description: Signed upload URL and metadata } }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Supabase user JWT or lm_test_/lm_live_ machine API key.
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    Limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
+    Offset: { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+  responses:
+    BadRequest:
+      description: Validation error
+      content:
+        application/json: { schema: { $ref: '#/components/schemas/Error' } }
+  schemas:
+    Success:
+      type: object
+      required: [success, data, request_id]
+      properties:
+        success: { const: true }
+        data: {}
+        request_id: { type: string }
+    Error:
+      type: object
+      required: [success, error, request_id]
+      properties:
+        success: { const: false }
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            details: {}
+        request_id: { type: string }
