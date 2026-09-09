@@ -1,0 +1,14 @@
+name = "loudapp-api-gateway-staging"
+main = "loudapp-api-gateway.js"
+compatibility_date = "2026-09-09"
+workers_dev = false
+
+[vars]
+ENVIRONMENT = "staging"
+UPSTREAM_API_BASE_URL = "https://jgibiferbvjyifpcruck.supabase.co/functions/v1/loudapp-api-v1"
+ALLOWED_ORIGINS = "http://localhost:4173,http://127.0.0.1:4173"
+
+# Add the production Cloudflare Rate Limiting binding before exposing this gateway publicly.
+# [[ratelimits]]
+# name = "API_RATE_LIMITER"
+# namespace_id = "REPLACE_WITH_CLOUDFLARE_RATE_LIMIT_NAMESPACE_ID"

@@ -2,18 +2,21 @@
 
 This repository now contains the staged API foundation for the future web and Flutter clients.
 
-## Runtime topology
+## Staging environment
+
+A dedicated staging project is provisioned and active:
 
 ```text
-Flutter / web
-  -> Cloudflare Worker: api.loudmusic.io
-  -> Supabase Edge Function: loudapp-api-v1
-  -> Postgres schema: loudapp (RLS enabled)
-  -> Supabase Storage / provider workers
+Project: LOUDapp Staging
+Ref: jgibiferbvjyifpcruck
+Region: us-west-2
+Status: ACTIVE_HEALTHY
+API: https://jgibiferbvjyifpcruck.supabase.co/functions/v1/loudapp-api-v1
+Webhooks: https://jgibiferbvjyifpcruck.supabase.co/functions/v1/loudapp-webhooks-v1
+Storage bucket: loudapp-private (private)
 ```
 
-`loudapp-webhooks-v1` is separate from the user API. It accepts provider callbacks only after raw-body HMAC verification and persists a unique `(provider, event_id)` before asynchronous processing.
-
+The LOUDapp migration is applied, the two functions are active, the `loudapp` schema is exposed to PostgREST with anonymous access denied, and the authenticated workspace/API-key/playlist/Storage E2E test passes with cleanup verified. The deploy-ready Cloudflare configuration is `deploy/cloudflare/wrangler.staging.toml`.
 ## Authentication
 
 - Human users: `Authorization: Bearer <Supabase user JWT>`.
