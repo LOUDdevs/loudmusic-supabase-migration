@@ -18,6 +18,11 @@ function bearer(req: Request): string {
   return header.replace(/^Bearer\s+/i, '')
 }
 
+function boundedLimit(value: string | null, fallback: number, maximum = 100): number {
+  const parsed = Number(value ?? fallback)
+  return Number.isFinite(parsed) ? Math.min(Math.max(Math.trunc(parsed), 1), maximum) : fallback
+}
+
 function createPublicClient(req: Request): SupabaseClient {
   return createClient(
     Deno.env.get('SUPABASE_URL')!,
@@ -76,26 +81,28 @@ serve(async (req) => {
     const path = url.pathname.replace(/^\/artist-enrichment/, '') || '/'
 
     if (path === '/api/artists' && req.method === 'GET') {
+      const limit = boundedLimit(url.searchParams.get('limit'), 100)
       const { data, error } = await publicClient
         .from('artist')
         .select('*')
         .order('enhanced_at', { ascending: false })
-        .limit(100)
+        .limit(limit)
 
       if (error) throw error
-      return jsonResponse(data)
+      return jsonResponse({ success: true, data })
     }
 
     if (path === '/api/artists/search' && req.method === 'GET') {
       const q = url.searchParams.get('q') || ''
+      const limit = boundedLimit(url.searchParams.get('limit'), 50)
       const { data, error } = await publicClient
         .from('artist')
         .select('*')
         .ilike('name', `%${q}%`)
-        .limit(50)
+        .limit(limit)
 
       if (error) throw error
-      return jsonResponse(data)
+      return jsonResponse({ success: true, data })
     }
 
     if (path === '/api/artists/enrich' && req.method === 'POST') {

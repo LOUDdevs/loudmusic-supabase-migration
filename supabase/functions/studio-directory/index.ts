@@ -19,6 +19,11 @@ function parseNumber(value: string | null, fallback?: number): number | null {
   return Number.isFinite(parsed) ? parsed : null
 }
 
+function boundedLimit(value: string | null, fallback: number, maximum = 100): number {
+  const parsed = parseNumber(value, fallback) ?? fallback
+  return Math.min(Math.max(Math.trunc(parsed), 1), maximum)
+}
+
 function distanceMiles(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const toRad = (degrees: number) => degrees * Math.PI / 180
   const earthRadiusMiles = 3958.7613
@@ -45,12 +50,13 @@ serve(async (req) => {
     const path = url.pathname.replace(/^\/studio-directory/, '') || '/'
 
     if (path === '/api/studios') {
+      const limit = boundedLimit(url.searchParams.get('limit'), 100)
       const { data, error } = await supabase
         .from('studios')
         .select('*')
-        .limit(100)
+        .limit(limit)
       if (error) throw error
-      return jsonResponse(data)
+      return jsonResponse({ success: true, data })
     }
 
     if (path.match(/^\/api\/studio\/[^\/]+$/)) {
@@ -66,13 +72,14 @@ serve(async (req) => {
 
     if (path === '/api/search') {
       const q = url.searchParams.get('q') || ''
+      const limit = boundedLimit(url.searchParams.get('limit'), 50)
       const { data, error } = await supabase
         .from('studios')
         .select('*')
         .ilike('name', `%${q}%`)
-        .limit(50)
+        .limit(limit)
       if (error) throw error
-      return jsonResponse(data)
+      return jsonResponse({ success: true, data })
     }
 
     if (path === '/api/nearby') {
@@ -110,7 +117,7 @@ serve(async (req) => {
         .sort((a, b) => a.distance_miles - b.distance_miles)
         .slice(0, limit)
 
-      return jsonResponse(nearby)
+      return jsonResponse({ success: true, data: nearby })
     }
 
     return jsonResponse({ detail: 'Not Found' }, 404)

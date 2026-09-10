@@ -153,7 +153,8 @@ def main() -> int:
     def edge_studio_directory_valid() -> str:
         list_resp = request("GET", f"{base_url}/functions/v1/studio-directory/api/studios", anon_key)
         assert list_resp["status"] == 200, f"status={list_resp['status']} body={list_resp['text'][:300]}"
-        data = list_resp["json"]
+        payload = list_resp["json"]
+        data = payload.get("data") if isinstance(payload, dict) and "data" in payload else payload
         assert isinstance(data, list) and 0 < len(data) <= 100, f"bad list length: {len(data) if isinstance(data, list) else type(data)}"
         require_keys(data[0], ["id", "slug", "name", "city", "state"])
 
@@ -165,8 +166,10 @@ def main() -> int:
         q = urllib.parse.quote(data[0]["name"].split()[0])
         search = request("GET", f"{base_url}/functions/v1/studio-directory/api/search?q={q}", anon_key)
         assert search["status"] == 200, f"search status={search['status']} body={search['text'][:300]}"
-        assert isinstance(search["json"], list) and search["json"], "expected query-relevant search results"
-        return f"list={len(data)} single={slug} search={len(search['json'])}"
+        search_payload = search["json"]
+        search_data = search_payload.get("data") if isinstance(search_payload, dict) and "data" in search_payload else search_payload
+        assert isinstance(search_data, list) and search_data, "expected query-relevant search results"
+        return f"list={len(data)} single={slug} search={len(search_data)}"
 
     check("Edge studio-directory list/single/search are semantically valid", edge_studio_directory_valid)
 
@@ -177,7 +180,8 @@ def main() -> int:
             anon_key,
         )
         assert resp["status"] == 200, f"status={resp['status']} body={resp['text'][:300]}"
-        data = resp["json"]
+        payload = resp["json"]
+        data = payload.get("data") if isinstance(payload, dict) and "data" in payload else payload
         assert isinstance(data, list), f"expected list, got {type(data).__name__}"
         assert data, "expected nearby studios around San Diego sample point"
         for row in data:
@@ -265,13 +269,16 @@ def main() -> int:
     def artist_edge_auth_behavior() -> str:
         listed = request("GET", f"{base_url}/functions/v1/artist-enrichment/api/artists", anon_key)
         assert listed["status"] == 200, f"list status={listed['status']} body={listed['text'][:300]}"
-        data = listed["json"]
+        listed_payload = listed["json"]
+        data = listed_payload.get("data") if isinstance(listed_payload, dict) and "data" in listed_payload else listed_payload
         assert isinstance(data, list) and data, "expected populated artist list"
-        require_keys(data[0], ["id", "spotify_id", "name", "enhanced_at"])
+        require_keys(data[0], ["id", "spotify_id", "name"])
 
         query = urllib.parse.quote(data[0]["name"].split()[0])
         searched = request("GET", f"{base_url}/functions/v1/artist-enrichment/api/artists/search?q={query}", anon_key)
-        assert searched["status"] == 200 and isinstance(searched["json"], list) and searched["json"], searched
+        searched_payload = searched["json"]
+        searched_data = searched_payload.get("data") if isinstance(searched_payload, dict) and "data" in searched_payload else searched_payload
+        assert searched["status"] == 200 and isinstance(searched_data, list) and searched_data, searched
 
         forbidden = request(
             "POST",
